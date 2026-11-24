@@ -1,0 +1,27 @@
+[package]
+name = "kb-editor"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.95"
+description = "SharePoint Article Manager: a native Markdown editor for SharePoint Knowledge Base articles"
+
+[dependencies]
+comrak = { version = "1.2.0", default-features = false }
+raw-window-handle = "0.6"
+rfd = { version = "0.18.0", default-features = false }
+windows-collections = "0.100"
+windows-core = "0.100"
+windows-numerics = "0.100"
+windows-reactor = "0.100.0"
+windows-reference = "0.100"
+
+[build-dependencies]
+windows-reactor-setup = "0.100.0"
+
+[workspace]
+members = [".", "tools/bindgen"]
+
+# windows-reactor 0.100 only exposes RichEditBox as plain text. The vendored copy adds
+# `ElementRef::request_native_object` so the editor can reach the WinUI text object model.
+[patch.crates-io]
+windows-reactor = { path = "vendor/windows-reactor" }

@@ -1,0 +1,84 @@
+Microsoft.UI.Text
+Microsoft.UI.Xaml.Controls.IRichEditBox::{TextDocument, DisabledFormattingAccelerators, IsSpellCheckEnabled, ClipboardCopyFormat, SelectionChanged, TextChanged, Paste, SelectionFlyout}
+Microsoft.UI.Xaml.Controls.DisabledFormattingAccelerators
+Microsoft.UI.Xaml.Controls.RichEditClipboardFormat
+Microsoft.UI.Xaml.Controls.TextControlPasteEventHandler
+Microsoft.UI.Xaml.Controls.TextControlPasteEventArgs
+Microsoft.UI.Xaml.RoutedEventHandler
+Windows.UI.Color
+Microsoft.UI.Xaml.IUIElement::{PreviewKeyDown, StartBringIntoView, StartBringIntoViewWithOptions, ContextFlyout, XamlRoot}
+Microsoft.UI.Xaml.Input.KeyEventHandler
+Microsoft.UI.Xaml.Input.KeyRoutedEventArgs::{}
+Microsoft.UI.Xaml.Input.IKeyRoutedEventArgs::{Key, Handled}
+Microsoft.UI.Xaml.IRoutedEventArgs::{}
+Windows.System.VirtualKey
+Microsoft.UI.Xaml.IWindowEventArgs::{Handled}
+Microsoft.UI.Xaml.BringIntoViewOptions
+Windows.Foundation.Rect
+Microsoft.UI.Xaml.Controls.Primitives.IFlyoutBase::{Opening, Opened, Closed, Hide, Target}
+Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase::{}
+Microsoft.UI.Xaml.Controls.ICommandBarFlyout::{PrimaryCommands, SecondaryCommands}
+Microsoft.UI.Xaml.Controls.CommandBarFlyout::{}
+Microsoft.UI.Xaml.Controls.ICommandBarElement::{}
+Microsoft.UI.Xaml.Controls.AppBarButton::{}
+Microsoft.UI.Xaml.Controls.IAppBarButton::{Label, Icon}
+Microsoft.UI.Xaml.Controls.IAppBarToggleButton::{Label}
+Microsoft.UI.Xaml.Controls.IButton::{Flyout}
+Microsoft.UI.Xaml.Controls.Primitives.IButtonBase::{Click}
+Microsoft.UI.Xaml.Controls.MenuFlyout::{}
+Microsoft.UI.Xaml.Controls.IMenuFlyout::{Items, MenuFlyoutPresenterStyle}
+Microsoft.UI.Xaml.Controls.MenuFlyoutItemBase::{}
+Microsoft.UI.Xaml.Controls.MenuFlyoutItem::{}
+Microsoft.UI.Xaml.Controls.IMenuFlyoutItem::{Text, Click}
+Microsoft.UI.Xaml.Controls.IconElement::{}
+Microsoft.UI.Xaml.Controls.FontIcon::{}
+Microsoft.UI.Xaml.Controls.IFontIcon::{Glyph}
+Windows.Foundation.EventHandler
+Windows.Foundation.Point
+Microsoft.UI.Xaml.Controls.AppBarSeparator::{}
+Microsoft.UI.Xaml.XamlRoot::{}
+Microsoft.UI.Xaml.IXamlRoot2::{ContentIslandEnvironment}
+Microsoft.UI.Xaml.IFrameworkElement::{RequestedTheme}
+Microsoft.UI.Xaml.ElementTheme
+Microsoft.UI.Content.ContentIslandEnvironment::{}
+Microsoft.UI.Content.IContentIslandEnvironment::{AppWindowId}
+Microsoft.UI.WindowId
+Microsoft.UI.Windowing.AppWindow::{}
+Microsoft.UI.Windowing.IAppWindowStatics::{GetFromWindowId}
+Microsoft.UI.Windowing.IAppWindow::{TitleBar}
+Microsoft.UI.Windowing.AppWindowTitleBar::{}
+Microsoft.UI.Windowing.IAppWindowTitleBar::{ButtonBackgroundColor, ButtonForegroundColor, ButtonHoverBackgroundColor, ButtonHoverForegroundColor, ButtonPressedBackgroundColor, ButtonPressedForegroundColor, ButtonInactiveBackgroundColor, ButtonInactiveForegroundColor}
+Windows.UI.ViewManagement.UISettings::{}
+Windows.UI.ViewManagement.IUISettings3::{GetColorValue}
+Windows.UI.ViewManagement.UIColorType
+Microsoft.UI.Xaml.IUIElementProtected::{ProtectedCursor}
+Microsoft.UI.Input.InputCursor::{}
+Microsoft.UI.Input.InputSystemCursor::{}
+Microsoft.UI.Input.IInputSystemCursorStatics::{Create}
+Microsoft.UI.Input.InputSystemCursorShape
+Microsoft.UI.Xaml.Style::{}
+Microsoft.UI.Xaml.Markup.XamlReader::{}
+Microsoft.UI.Xaml.Markup.IXamlReaderStatics::{Load}
+Microsoft.UI.Xaml.Media.VisualTreeHelper::{}
+Microsoft.UI.Xaml.Media.IVisualTreeHelperStatics::{GetParent, GetChild, GetChildrenCount}
+Windows.Win32.ISpellCheckerFactory
+Windows.Win32.SpellCheckerFactory
+Windows.Win32.ISpellChecker
+Windows.Win32.IEnumSpellingError
+Windows.Win32.ISpellingError
+Windows.Win32.CORRECTIVE_ACTION
+Windows.Win32.GetUserDefaultLocaleName
+Windows.Win32.CoCreateInstance
+Windows.Win32.CLSCTX
+Windows.Win32.CoTaskMemFree
+Windows.Win32.IEnumString
+Microsoft.UI.Xaml.Controls.IComboBox::{DropDownOpened}
+Microsoft.UI.Xaml.Controls.IItemContainerMapping::{ContainerFromIndex}
+Microsoft.UI.Xaml.Controls.IControl::{FontSize, FontWeight}
+Windows.UI.Text.FontWeight
+Microsoft.UI.Dispatching.DispatcherQueue::{}
+Microsoft.UI.Dispatching.IDispatcherQueueStatics::{GetForCurrentThread}
+Microsoft.UI.Dispatching.IDispatcherQueue::{TryEnqueueWithPriority}
+Microsoft.UI.Dispatching.DispatcherQueueHandler
+Microsoft.UI.Dispatching.DispatcherQueuePriority
+Microsoft.UI.Xaml.Controls.ITextBlock::{FontSize, FontWeight}
