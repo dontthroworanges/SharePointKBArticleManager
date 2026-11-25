@@ -1057,6 +1057,27 @@ impl Editor {
         if self.page.requested {
             return;
         }
+        // The control paints white behind the page unless told otherwise; clear, the canvas
+        // behind it (which follows the theme) shows around the page.
+        _ = self.web.request_native_object(|result| {
+            let cleared = result
+                .map_err(|error| format!("{error:?}"))
+                .and_then(|object| {
+                    windows_core::Interface::cast::<crate::winui::IWebView2>(&object)
+                        .and_then(|web| {
+                            web.SetDefaultBackgroundColor(crate::winui::Color {
+                                a: 0,
+                                r: 0,
+                                g: 0,
+                                b: 0,
+                            })
+                        })
+                        .map_err(|error| error.to_string())
+                });
+            if let Err(error) = cleared {
+                crate::log::log!("could not clear the page's background: {error}");
+            }
+        });
         let sender = context.sender();
         self.page.requested = self.web.request_core_web_view2(move |result| {
             sender.send(match result {

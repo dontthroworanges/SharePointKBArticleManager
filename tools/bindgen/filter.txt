@@ -110,3 +110,4 @@ Microsoft.UI.Dispatching.DispatcherQueuePriority
 Microsoft.UI.Xaml.Controls.ITextBlock::{FontSize, FontWeight}
 Microsoft.UI.Xaml.Controls.IScrollViewerStatics::{SetVerticalScrollBarVisibility}
 Microsoft.UI.Xaml.Controls.ScrollBarVisibility
+Microsoft.UI.Xaml.Controls.IWebView2::{DefaultBackgroundColor}

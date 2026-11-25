@@ -99,7 +99,7 @@ impl Page {
 }
 
 /// Before the window opens: where WebView2 keeps its data (next to the exe would fail under
-/// Program Files), and a clear background so the window shows around the page.
+/// Program Files).
 pub fn prepare_environment() {
     let data = PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default())
         .join(super::APP_NAME)
@@ -107,7 +107,6 @@ pub fn prepare_environment() {
     // SAFETY: set before any other thread starts (the window and WebView2 come later).
     unsafe {
         std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", data);
-        std::env::set_var("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0");
     }
 }
 

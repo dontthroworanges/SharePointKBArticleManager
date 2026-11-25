@@ -11801,6 +11801,53 @@ pub struct IVisualTreeHelperStatics_Vtbl {
     ) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
+    IWebView2,
+    IWebView2_Vtbl,
+    0x2b2c76c2_997c_5069_a8f0_9b84cd7e624b
+);
+impl windows_core::RuntimeType for IWebView2 {
+    const SIGNATURE: windows_core::imp::ConstBuffer =
+        windows_core::imp::ConstBuffer::for_interface::<Self>();
+}
+impl IWebView2 {
+    pub fn DefaultBackgroundColor(&self) -> windows_core::Result<Color> {
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            (windows_core::Interface::vtable(self).DefaultBackgroundColor)(
+                windows_core::Interface::as_raw(self),
+                &mut result__,
+            )
+            .map(|| result__)
+        }
+    }
+    pub fn SetDefaultBackgroundColor(&self, value: Color) -> windows_core::Result<()> {
+        unsafe {
+            (windows_core::Interface::vtable(self).SetDefaultBackgroundColor)(
+                windows_core::Interface::as_raw(self),
+                value,
+            )
+            .ok()
+        }
+    }
+}
+#[repr(C)]
+pub struct IWebView2_Vtbl {
+    pub base__: windows_core::IInspectable_Vtbl,
+    CoreWebView2: usize,
+    EnsureCoreWebView2Async: usize,
+    ExecuteScriptAsync: usize,
+    Source: usize,
+    SetSource: usize,
+    CanGoForward: usize,
+    SetCanGoForward: usize,
+    CanGoBack: usize,
+    SetCanGoBack: usize,
+    pub DefaultBackgroundColor:
+        unsafe extern "system" fn(*mut core::ffi::c_void, *mut Color) -> windows_core::HRESULT,
+    pub SetDefaultBackgroundColor:
+        unsafe extern "system" fn(*mut core::ffi::c_void, Color) -> windows_core::HRESULT,
+}
+windows_core::imp::define_interface!(
     IWindowEventArgs,
     IWindowEventArgs_Vtbl,
     0x1140827c_fe0a_5268_bc2b_f4492c2ccb49
