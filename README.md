@@ -10,7 +10,7 @@ The point of this application is to offer a simple, desktop based, Word-Like exp
 
 ## Current Features
 - Built in Rust with Windows native WebUI3. Supports Light/Dark themes and Windows color
-- Document canvas uses WebView2 for best speed and compatibility with SharePoint format 
+- Document canvas uses WebView2 for best speed and compatibility with SharePoint format (I tried to use all native WinUI controls and it was slow and glitchy. Just FYI). 
 - Visual and Markdown editors with standard text formatting including six heading levels
 - Document Navigation based on Heading tags
 - Find and Replace (One, All, Ignore One, Ignore All)
