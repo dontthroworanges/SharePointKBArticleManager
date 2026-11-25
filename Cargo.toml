@@ -1,9 +1,13 @@
 [package]
 name = "kb-editor"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 rust-version = "1.95"
 description = "SharePoint Article Manager: a native Markdown editor for SharePoint Knowledge Base articles"
+
+[[bin]]
+name = "SharePointArticleManager"
+path = "src/main.rs"
 
 [dependencies]
 comrak = { version = "1.2.0", default-features = false }

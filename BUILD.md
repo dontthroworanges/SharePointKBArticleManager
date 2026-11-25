@@ -20,7 +20,7 @@ The page's files are in `web/`. A debug build serves them straight from there, s
 
 ## CI and releases
 
-GitHub Actions (`.github/workflows/`) builds and tests every push to `main` and every pull request on Windows, and checks that `web/vendor/tiptap.js` matches its sources. To release: bump `version` in `Cargo.toml` (and `Cargo.lock`), commit, then tag and push, e.g. `git tag v0.5.0 && git push origin v0.5.0`. The release workflow checks the tag against `Cargo.toml`, runs the tests, builds, and publishes a GitHub release with a zip of the exe and its runtime files.
+GitHub Actions (`.github/workflows/`) builds and tests every push to `main` and every pull request on Windows, and checks that `web/vendor/tiptap.js` matches its sources. To release: bump `version` in `Cargo.toml` (and `Cargo.lock`), commit, then tag and push, e.g. `git tag v0.5.0 && git push origin v0.5.0`. The release workflow checks the tag against `Cargo.toml`, runs the tests, builds, and publishes a GitHub release with a zip of the exe and its runtime files. The exe is `SharePointArticleManager.exe`.
 
 ## What it supports
 
