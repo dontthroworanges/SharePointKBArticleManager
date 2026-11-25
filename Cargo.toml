@@ -1,6 +1,6 @@
 [package]
 name = "kb-editor"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 rust-version = "1.95"
 description = "SharePoint Article Manager: a native Markdown editor for SharePoint Knowledge Base articles"
