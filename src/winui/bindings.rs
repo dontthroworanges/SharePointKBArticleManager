@@ -11413,6 +11413,39 @@ impl IUISettings3 {
             .map(|| result__)
         }
     }
+    pub fn ColorValuesChanged<F>(
+        &self,
+        handler: F,
+    ) -> windows_core::Result<windows_core::EventRevoker>
+    where
+        F: Fn(windows_core::Ref<UISettings>, windows_core::Ref<windows_core::IInspectable>)
+            + 'static,
+    {
+        let handler: TypedEventHandler<UISettings, windows_core::IInspectable> = {
+            let com = windows_core::imp::DelegateBox::<
+                TypedEventHandler<UISettings, windows_core::IInspectable>,
+                F,
+            >::new(
+                &TypedEventHandlerBox::<UISettings, windows_core::IInspectable, F>::VTABLE,
+                handler,
+            );
+            unsafe { core::mem::transmute(windows_core::imp::box_new(com)) }
+        };
+        unsafe {
+            let mut result__ = core::mem::zeroed();
+            let token__ = (windows_core::Interface::vtable(self).ColorValuesChanged)(
+                windows_core::Interface::as_raw(self),
+                windows_core::Interface::as_raw(&handler),
+                &mut result__,
+            )
+            .map(|| result__)?;
+            Ok(windows_core::EventRevoker::new(
+                self.clone(),
+                token__,
+                windows_core::Interface::vtable(self).RemoveColorValuesChanged,
+            ))
+        }
+    }
 }
 #[repr(C)]
 pub struct IUISettings3_Vtbl {
@@ -11422,6 +11455,13 @@ pub struct IUISettings3_Vtbl {
         UIColorType,
         *mut Color,
     ) -> windows_core::HRESULT,
+    pub ColorValuesChanged: unsafe extern "system" fn(
+        *mut core::ffi::c_void,
+        *mut core::ffi::c_void,
+        *mut i64,
+    ) -> windows_core::HRESULT,
+    pub RemoveColorValuesChanged:
+        unsafe extern "system" fn(*mut core::ffi::c_void, i64) -> windows_core::HRESULT,
 }
 windows_core::imp::define_interface!(
     IUISettings4,

@@ -91,6 +91,16 @@ impl Palette {
     }
 }
 
+impl Palette {
+    /// Tells palettes apart, for view keys: a button keeps the colors it was made with, so a
+    /// button that uses them is keyed by this and made again when the theme or accent changes.
+    pub fn key(self) -> u64 {
+        let accent = self.band;
+        (u64::from(accent.r) << 17 | u64::from(accent.g) << 9 | u64::from(accent.b) << 1)
+            | u64::from(self.dark)
+    }
+}
+
 impl Default for Palette {
     fn default() -> Self {
         Self::new(false, DEFAULT_ACCENT)
@@ -108,6 +118,39 @@ pub fn set_current(palette: Palette) {
 
 pub fn current() -> Palette {
     CURRENT.with(Cell::get)
+}
+
+thread_local! {
+    /// What to do when Windows' colors change; called on the UI thread (see `watch_colors`).
+    static ON_COLORS: std::cell::RefCell<Option<Box<dyn Fn()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Calls `changed` whenever Windows' colors change (the accent, in Settings › Personalization
+/// › Colors). Call once, on the UI thread. Windows raises the event on a background thread, so
+/// it only queues the call for the UI thread, whose callback reads `ON_COLORS` there.
+pub fn watch_colors(changed: impl Fn() + 'static) -> Result<()> {
+    ON_COLORS.with(|on| *on.borrow_mut() = Some(Box::new(changed)));
+    let queue = native::DispatcherQueue::GetForCurrentThread()?.cast::<native::IDispatcherQueue>()?;
+    let settings: native::UISettings =
+        windows_core::factory::<native::UISettings, windows_core::imp::IGenericFactory>()?
+            .ActivateInstance()?;
+    let revoker = settings
+        .cast::<native::IUISettings3>()?
+        .ColorValuesChanged(move |_, _| {
+            let handler = native::DispatcherQueueHandler::new(|| {
+                ON_COLORS.with(|on| {
+                    if let Some(changed) = on.borrow().as_ref() {
+                        changed();
+                    }
+                });
+            });
+            _ = queue.TryEnqueueWithPriority(native::DispatcherQueuePriority::Normal, &handler);
+        })?;
+    // Both live as long as the app: the event stops if the settings object goes.
+    std::mem::forget(revoker);
+    std::mem::forget(settings);
+    Ok(())
 }
 
 /// The user's Windows accent color (Settings › Personalization › Colors).

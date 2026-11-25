@@ -75,7 +75,7 @@ Microsoft.UI.Windowing.IAppWindow::{TitleBar}
 Microsoft.UI.Windowing.AppWindowTitleBar::{}
 Microsoft.UI.Windowing.IAppWindowTitleBar::{ButtonBackgroundColor, ButtonForegroundColor, ButtonHoverBackgroundColor, ButtonHoverForegroundColor, ButtonPressedBackgroundColor, ButtonPressedForegroundColor, ButtonInactiveBackgroundColor, ButtonInactiveForegroundColor}
 Windows.UI.ViewManagement.UISettings::{}
-Windows.UI.ViewManagement.IUISettings3::{GetColorValue}
+Windows.UI.ViewManagement.IUISettings3::{GetColorValue, ColorValuesChanged}
 Windows.UI.ViewManagement.UIColorType
 Microsoft.UI.Xaml.IUIElementProtected::{ProtectedCursor}
 Microsoft.UI.Input.InputCursor::{}

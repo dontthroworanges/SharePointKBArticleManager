@@ -240,6 +240,8 @@ pub enum Msg {
     WindowSize(WindowSize),
     /// The window's theme changed (Windows' app mode, or View › Theme).
     ColorScheme(ColorScheme),
+    /// Windows' colors changed (the accent, in Settings › Personalization › Colors).
+    ColorsChanged,
     /// Dragging the Document Editor's edge: pressed, moved, released.
     SplitterPressed(PointerEventInfo),
     SplitterMoved(PointerEventInfo),
@@ -719,6 +721,13 @@ impl Component for Editor {
             Some(path) => editor.open_path(path.clone()),
             None => editor.load(Document::default()),
         }
+        // The accent can change while the app runs; the title band and highlights follow it.
+        let sender = context.sender();
+        if let Err(error) = theme::watch_colors(move || {
+            sender.send(Msg::ColorsChanged);
+        }) {
+            crate::log::log!("cannot follow accent color changes: {error:?}");
+        }
         editor.sync_page();
         editor
     }
@@ -884,6 +893,7 @@ impl Editor {
                     self.options.paragraph_size = size;
                 }
             }
+            Msg::ColorsChanged => self.accent = theme::system_accent(),
             Msg::ColorScheme(scheme) => {
                 self.scheme = scheme;
                 // The accent may have changed with the theme in Settings; read it again.
@@ -1106,6 +1116,8 @@ impl Editor {
             // The app's theme, which may differ from Windows': the page's scroll bars and
             // controls follow it.
             "windowDark": self.scheme == ColorScheme::Dark,
+            // Windows' accent, for outlines on the page.
+            "accent": format!("#{:02x}{:02x}{:02x}", self.accent.r, self.accent.g, self.accent.b),
         });
         if self.sent_settings.as_ref() != Some(&settings) {
             self.sent_settings = Some(settings.clone());

@@ -8,7 +8,7 @@
 //   load {doc}                    a new document (undo starts empty)
 //   source {markdown}             show the Markdown view with this text
 //   visual                        show the visual view again, as it was
-//   settings {zoom, fit, darkPage, bodyPx, cursorSpace, windowDark}
+//   settings {zoom, fit, darkPage, bodyPx, cursorSpace, windowDark, accent}
 //   command {name, ...}           an editing command (see `commands`)
 //   get {id, what}                reply {id, doc | markdown | blocks}
 //   find {query, matchCase, wholeWords}
@@ -487,6 +487,8 @@ function applySettings() {
   root.classList.toggle('dark-page', !!settings.darkPage);
   // Scroll bars (and checkboxes) in the app's theme, not Windows'.
   root.style.colorScheme = settings.windowDark ? 'dark' : 'light';
+  // Outlines on the page follow the Windows accent.
+  if (settings.accent) root.style.setProperty('--accent', settings.accent);
   layoutPage();
   if (editor) {
     const below = Math.round(innerHeight * settings.cursorSpace / 100);

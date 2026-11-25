@@ -130,6 +130,5 @@ These patches are candidates to upstream to [microsoft/windows-rs](https://githu
 - The status bar has no messages; problems (a file that could not be saved, for example) show in a bar above the page until closed.
 - Pasting keeps only formatting Markdown supports; anything else is dropped as it is pasted.
 - Dialogs follow the Windows theme, so they're dark in dark mode while the page stays light (unless View › Switch Background is on).
-- A change of Windows accent color shows after the next theme change or restart.
 - Space before and after paragraphs can't be set: Markdown has no way to store it, and SharePoint applies its own spacing when it shows the page.
 - There is no direct upload to SharePoint yet. Save the file, then use **New > Import** in the knowledge base.

@@ -844,7 +844,7 @@ fn row_of(views: Vec<View>) -> View {
             views
                 .into_iter()
                 .enumerate()
-                .map(|(index, view)| (index as u64, view))
+                .map(|(index, view)| (themed_key(index), view))
                 .collect::<Vec<_>>(),
         )
 }

@@ -60,7 +60,7 @@ impl Editor {
                 self.tab,
                 self.ribbon_layout,
                 self.mode,
-                theme::current().dark,
+                theme::current().key(),
                 self.window_width.round() as i64,
             ),
             move || {
@@ -215,7 +215,7 @@ impl Editor {
             // Keyed by selection too: a tab that becomes selected gets a fresh button, since a
             // button keeps the pressed look it had when its colors change under the pointer.
             (
-                format!("{label}-{selected}-{}", theme::current().dark),
+                format!("{label}-{selected}-{}", theme::current().key()),
                 button,
                 selected,
             )
@@ -256,7 +256,7 @@ impl Editor {
             .content(path_icon(icons::SETTINGS, 18.0))
             .tooltip("Settings");
         cells.push((
-            format!("gear-{}", theme::current().dark),
+            format!("gear-{}", theme::current().key()),
             cell(rest + 1, gear.into(), false),
         ));
         let row = Grid::new()
@@ -554,7 +554,7 @@ impl Editor {
             let button = button.content(icon.tooltip(tip));
             // Keyed by selection and theme: a live button keeps its first colors.
             (
-                format!("{mode:?}-{selected}-{}", theme::current().dark),
+                format!("{mode:?}-{selected}-{}", theme::current().key()),
                 button,
             )
         };
@@ -701,7 +701,8 @@ fn resize_cursor(element: &windows_core::IUnknown) -> windows_core::Result<()> {
 /// A list key that changes with the theme. Buttons colored through resource overrides keep
 /// their old colors when the overrides change with the theme, so they are rebuilt instead.
 fn themed_key(index: usize) -> u64 {
-    (index as u64) << 1 | u64::from(theme::current().dark)
+    // Below bit 25, the palette (see `Palette::key`).
+    (index as u64) << 25 | theme::current().key()
 }
 
 fn row(items: Vec<Item>) -> View {
