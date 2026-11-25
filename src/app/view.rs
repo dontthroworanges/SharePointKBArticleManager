@@ -383,10 +383,23 @@ impl Editor {
             .padding(Thickness::uniform(16.0))
             .content(
                 StackPanel::new().spacing(10.0).children((
-                    TextBlock::new()
-                        .text("Page properties")
-                        .font_size(18.0)
-                        .font_weight(FontWeight::SEMI_BOLD),
+                    // As the Document Editor's header: the title, and a close button.
+                    Grid::new()
+                        .columns([GridLength::STAR, GridLength::Auto])
+                        .children((
+                            TextBlock::new()
+                                .text("Page properties")
+                                .font_size(18.0)
+                                .font_weight(FontWeight::SEMI_BOLD)
+                                .vertical_alignment(VerticalAlignment::Center)
+                                .grid_column(0),
+                            Button::new()
+                                .style(ButtonStyle::Subtle)
+                                .on_click(context.message(Msg::Command(Command::ToggleProperties)))
+                                .content(symbol(Symbol::Cancel))
+                                .tooltip("Close page properties")
+                                .in_column(1),
+                        )),
                     caption("Saved as YAML front matter at the top of the file."),
                     body,
                     add,

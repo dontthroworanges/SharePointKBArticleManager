@@ -485,6 +485,8 @@ function applySettings() {
   root.style.setProperty('--zoom', String(zoom));
   root.style.setProperty('--body-size', `${settings.bodyPx / 16}rem`);
   root.classList.toggle('dark-page', !!settings.darkPage);
+  // Scroll bars (and checkboxes) in the app's theme, not Windows'.
+  root.style.colorScheme = settings.windowDark ? 'dark' : 'light';
   layoutPage();
   if (editor) {
     const below = Math.round(innerHeight * settings.cursorSpace / 100);

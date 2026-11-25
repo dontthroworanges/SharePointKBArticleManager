@@ -1103,6 +1103,9 @@ impl Editor {
             // Points to pixels.
             "bodyPx": f64::from(self.options.paragraph_size) * 4.0 / 3.0,
             "cursorSpace": self.options.cursor_space,
+            // The app's theme, which may differ from Windows': the page's scroll bars and
+            // controls follow it.
+            "windowDark": self.scheme == ColorScheme::Dark,
         });
         if self.sent_settings.as_ref() != Some(&settings) {
             self.sent_settings = Some(settings.clone());

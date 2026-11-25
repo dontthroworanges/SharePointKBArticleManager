@@ -27,18 +27,19 @@
   font-size: calc(16px * var(--zoom));
 }
 
+/* A shade lighter than the dark window around it, so the page stands out from it. */
 :root.dark-page {
-  --page: #1f1f1f;
-  --border: #3b3a39;
+  --page: #2b2b2b;
+  --border: #3d3d3d;
   --text: #f3f2f1;
   --muted: #c8c6c4;
   --quote: #c8c6c4;
   --link: #479ef5;
   --rule: #605e5c;
-  --heading-rule: #3b3a39;
-  --card: #292827;
-  --card-border: #484644;
-  --code-bg: #323130;
+  --heading-rule: #403e3d;
+  --card: #333231;
+  --card-border: #4a4846;
+  --code-bg: #3a3938;
   --math-bg: #2b2e45;
   --highlight: #6b5e00;
   --selected: #264f78;
