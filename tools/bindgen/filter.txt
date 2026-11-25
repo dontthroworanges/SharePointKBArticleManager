@@ -6,7 +6,8 @@ Microsoft.UI.Xaml.Controls.TextControlPasteEventHandler
 Microsoft.UI.Xaml.Controls.TextControlPasteEventArgs
 Microsoft.UI.Xaml.RoutedEventHandler
 Windows.UI.Color
-Microsoft.UI.Xaml.IUIElement::{PreviewKeyDown, PointerWheelChanged, BringIntoViewRequested, TransformToVisual, StartBringIntoView, StartBringIntoViewWithOptions, ContextFlyout, XamlRoot}
+Microsoft.UI.Xaml.IUIElement::{PreviewKeyDown, PointerWheelChanged, BringIntoViewRequested, TransformToVisual, StartBringIntoView, StartBringIntoViewWithOptions, ContextFlyout, XamlRoot, Focus}
+Microsoft.UI.Xaml.FocusState
 Microsoft.UI.Xaml.Input.PointerEventHandler
 Microsoft.UI.Xaml.Input.PointerRoutedEventArgs::{}
 Microsoft.UI.Xaml.Input.IPointerRoutedEventArgs::{GetCurrentPoint, Handled}

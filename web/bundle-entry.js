@@ -8,3 +8,5 @@ export { Highlight } from '@tiptap/extension-highlight';
 export { TaskItem, TaskList } from '@tiptap/extension-list';
 export { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 export { Placeholder } from '@tiptap/extensions';
+export { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state';
+export { Decoration, DecorationSet } from '@tiptap/pm/view';

@@ -19,102 +19,12 @@ const BACK_BUTTON_INSET: f64 = 52.0;
 const CENTERED_TITLE_MARGIN: f64 = 240.0;
 const DIVIDER: ThemeBrush = ThemeBrush::Divider;
 const MUTED: ThemeBrush = ThemeBrush::SecondaryText;
-/// The page and what is on it: white like paper in both themes, unless View › Switch
-/// Background darkens it, as in Word.
-#[derive(Clone, Copy)]
-struct Paper {
-    page: Color,
-    border: Color,
-    card: Color,
-    card_border: Color,
-    rule: Color,
-    /// The rule under Heading 1 and 2: fainter than a divider, as SharePoint draws it.
-    heading_rule: Color,
-}
-
-const LIGHT_PAPER: Paper = Paper {
-    page: Color::rgb(0xFF, 0xFF, 0xFF),
-    border: Color::rgb(0xE1, 0xE1, 0xE1),
-    card: Color::rgb(0xF6, 0xF8, 0xFA),
-    card_border: Color::rgb(0xD8, 0xDE, 0xE4),
-    rule: Color::rgb(0xC8, 0xC6, 0xC4),
-    heading_rule: Color::rgb(0xED, 0xEB, 0xE9),
-};
-
-const DARK_PAPER: Paper = Paper {
-    page: Color::rgb(0x1F, 0x1F, 0x1F),
-    border: Color::rgb(0x3B, 0x3A, 0x39),
-    card: Color::rgb(0x29, 0x28, 0x27),
-    card_border: Color::rgb(0x48, 0x46, 0x44),
-    rule: Color::rgb(0x60, 0x5E, 0x5C),
-    heading_rule: Color::rgb(0x3B, 0x3A, 0x39),
-};
-
-/// The page colors in use, which follow the text colors `rich` styles with.
-fn paper() -> Paper {
-    if rich::page_colors() == rich::DARK_PAGE {
-        DARK_PAPER
-    } else {
-        LIGHT_PAPER
-    }
-}
 /// The Document Editor's width limits; the user sets the width by dragging its edge.
 const NAVIGATION_MIN: f64 = 200.0;
 const NAVIGATION_MAX: f64 = 640.0;
 /// Room the page keeps beside a wide Document Editor.
 const PAGE_MIN_ROOM: f64 = 420.0;
 const PROPERTIES_WIDTH: f64 = 320.0;
-
-/// Horizontal inset of RichEditBox text (its default theme padding), so objects line up with it.
-const TEXT_INSET: Inset = Inset {
-    left: 10.0,
-    right: 6.0,
-};
-
-#[derive(Clone, Copy)]
-struct Inset {
-    left: f64,
-    right: f64,
-}
-
-impl Inset {
-    fn with_vertical(self, vertical: f64) -> Thickness {
-        Thickness::new(self.left, vertical, self.right, vertical)
-    }
-}
-
-/// Theme resources that make a RichEditBox read as part of the page: no border, no
-/// background, and no focus underline.
-pub fn borderless_editor() -> ResourceOverrides {
-    let clear = Color::transparent();
-    let mut resources = ResourceOverrides::new();
-    for key in [
-        "TextControlBackground",
-        "TextControlBackgroundPointerOver",
-        "TextControlBackgroundFocused",
-        "TextControlBackgroundDisabled",
-        "TextControlBorderBrush",
-        "TextControlBorderBrushPointerOver",
-        "TextControlBorderBrushFocused",
-        "TextControlBorderBrushDisabled",
-    ] {
-        resources = resources.set(key, clear);
-    }
-    // SharePoint's text color, which the document's automatic text color follows.
-    let text = rich::page_colors().text;
-    let text = Color::argb(text.a, text.r, text.g, text.b);
-    for key in [
-        "TextControlForeground",
-        "TextControlForegroundPointerOver",
-        "TextControlForegroundFocused",
-        "TextControlForegroundDisabled",
-    ] {
-        resources = resources.set(key, text);
-    }
-    // Only brushes: overriding the border thickness resources crashes XAML when the box takes
-    // focus. A transparent border and underline are invisible at any thickness.
-    resources
-}
 
 impl Editor {
     pub(super) fn render(&self, context: &mut ViewContext<Self>) -> View {
@@ -135,9 +45,10 @@ impl Editor {
         });
         context.on_window_size(context.callback(Msg::WindowSize));
         context.on_color_scheme(context.callback(Msg::ColorScheme));
+        // The page starts once its WebView2 is on screen.
         let sender = context.sender();
-        context.use_effect("attach", self.generation, move || {
-            sender.send(Msg::Attach);
+        context.use_effect("page", (), move || {
+            sender.send(Msg::PageInit);
             None
         });
         // The Styles box is (re)built when the ribbon is: style its list as soon as it exists,
@@ -157,45 +68,6 @@ impl Editor {
                 None
             },
         );
-        let page = self.page.clone();
-        let dark_page = self.dark_page;
-        context.use_effect("page-theme", (self.generation, dark_page), move || {
-            _ = page.request_native_object(move |result| {
-                if let Err(error) = result
-                    .map_err(|error| format!("{error:?}"))
-                    .and_then(|object| theme::set_page_theme(&object, dark_page).map_err(|e| e.to_string()))
-                {
-                    crate::log::log!("could not set the page theme: {error}");
-                }
-            });
-            None
-        });
-
-        // Ctrl+wheel zoom and Navigation pane jumps (see `host::hook_page`). Hooked once per
-        // native page Grid.
-        let page = self.page.clone();
-        let page_hooks = Rc::clone(&self.page_hooks);
-        let navigating = Rc::clone(&self.navigating);
-        let sender = context.sender();
-        context.use_effect("page-hooks", self.generation, move || {
-            _ = page.request_native_object(move |result| {
-                let Ok(object) = result else { return };
-                let address = windows_core::Interface::as_raw(&object) as usize;
-                if page_hooks
-                    .borrow()
-                    .as_ref()
-                    .is_some_and(|(hooked, _)| *hooked == address)
-                {
-                    return;
-                }
-                match host::hook_page(object, sender.clone(), Rc::clone(&navigating)) {
-                    Ok(revokers) => *page_hooks.borrow_mut() = Some((address, revokers)),
-                    Err(error) => crate::log::log!("could not hook the page: {error:?}"),
-                }
-            });
-            None
-        });
-
         // Navigation pane | page | Properties pane, as in Word.
         let body = Grid::new()
             .columns([
@@ -217,7 +89,7 @@ impl Editor {
                 } else {
                     View::empty()
                 },
-                self.page(context).in_column(1),
+                self.page().in_column(1),
                 if self.show_properties {
                     self.properties_pane(context).in_column(2)
                 } else {
@@ -436,310 +308,13 @@ impl Editor {
             .content(commands)
     }
 
-    fn page(&self, context: &mut ViewContext<Self>) -> View {
-        let only_empty = self.segments.len() == 1;
-        // Zoom is real, as in Word (see `rich::zoom`): the editors' text is written at the
-        // zoomed size, and the page around it is laid out at the zoomed size too, so nothing is
-        // scaled when drawn.
-        let zoom = self.zoom;
-        let visual = StackPanel::new().spacing(4.0 * zoom).keyed_children(
-            self.segments
-                .iter()
-                .map(|segment| (segment.id(), self.segment(segment, only_empty, context)))
-                .collect::<Vec<_>>(),
-        );
-        let source = match self.source_id {
-            Some(id) => StackPanel::new().keyed_children([(id, self.text_editor(id, "", 400.0))]),
-            None => View::empty(),
-        };
-        // Both views stay on the page so their editors live on (switching is then quick, and
-        // the visual page keeps its caret and undo history). The one not in use takes no room
-        // and cannot be seen; only these two values change, so neither is ever rebuilt.
-        // Reactor wants a finite limit; this is far taller than any page.
-        const NO_LIMIT: f64 = 1.0e7;
-        let shown = |view: View, visible: bool| -> View {
-            Border::new()
-                .max_height(if visible { NO_LIMIT } else { 0.0 })
-                .opacity(if visible { 1.0 } else { 0.0 })
-                .content(view)
-        };
-        let content = StackPanel::new().keyed_children([
-            ("visual", shown(visual, self.mode == Mode::Visual)),
-            ("source", shown(source, self.mode == Mode::Source)),
-        ]);
-        // The page's width at 100%, and as laid out at this zoom: it keeps its line breaks.
-        let width = self.page_width() * zoom;
-        let page = Border::new()
-            .background(paper().page)
-            .border_brush(paper().border)
-            .border_thickness(Thickness::uniform(1.0))
-            .corner_radius(CornerRadius::uniform(4.0))
-            // Settings › Options › Space below the cursor: room at the end of the page, so the
-            // last line can still be scrolled up off the bottom of the window (more after a
-            // Navigation pane jump; see `end_room`). That room is a share of the window, so it
-            // is not zoomed.
-            .padding(Thickness::new(
-                64.0 * zoom,
-                48.0 * zoom,
-                64.0 * zoom,
-                48.0 * zoom + self.end_room(),
-            ))
-            .width(width)
-            // A portrait page, as in Word: at least as tall as a Letter sheet of this width.
-            .min_height(width * 11.0 / 8.5)
-            .content(content);
-        // The page keeps the light theme in a dark window (see `theme::set_page_theme`); a Grid
-        // carries the reference, which Reactor does not offer on a Border.
-        let page = Grid::new().element_ref(&self.page).children((page,));
-        let page = Border::new()
-            .horizontal_alignment(HorizontalAlignment::Center)
-            .margin(Thickness::xy(24.0, 24.0))
-            .content(page);
-        // A page zoomed wider than the window scrolls sideways. Otherwise sideways scrolling is
-        // off, so nothing (the caret following the text, say) can move the page sideways.
-        let wide = width > self.page_room();
-        let scroller = ScrollViewer::new()
-            .horizontal_scroll_bar_visibility(if wide {
-                ScrollBarVisibility::Auto
-            } else {
-                ScrollBarVisibility::Disabled
-            })
-            .vertical_scroll_bar_visibility(ScrollBarVisibility::Auto)
-            .content(page);
-        Border::new().background(CANVAS).content(scroller)
-    }
-
-    /// A RichEditBox inside a wrapper that carries the borderless theme resources. The box is
-    /// only created once the wrapper is styled, so its template picks the resources up.
-    fn text_editor(&self, id: Id, placeholder: &str, min_height: f64) -> View {
-        let (Some(wrapper), Some(editor)) = (self.wrappers.get(&id), self.editors.get(&id)) else {
-            return View::empty();
-        };
-        let child = if self.styled.contains(&id) {
-            let mut editor = RichEditBox::new()
-                .element_ref(editor)
-                // At 100%; the page is laid out zoomed (see `page`).
-                .min_height(min_height * self.zoom);
-            if !placeholder.is_empty() {
-                editor = editor.placeholder_text(placeholder);
-            }
-            View::from(editor)
-        } else {
-            View::empty()
-        };
-        // SharePoint's rules under Heading 1 and 2, laid over the editor at the positions it
-        // measured, across the text's width. Keyed, so rules coming and going never remount
-        // the editor.
-        let rules = self.rules.get(&id).into_iter().flatten().enumerate().map(|(index, &top)| {
-            let rule = Border::new()
-                .height(1.0)
-                .background(paper().heading_rule)
-                .vertical_alignment(VerticalAlignment::Top)
-                .margin(Thickness::new(
-                    TEXT_INSET.left,
-                    f64::from(top),
-                    TEXT_INSET.right,
-                    0.0,
-                ));
-            (format!("rule{index}"), View::from(rule))
-        });
-        Grid::new()
-            .element_ref(wrapper)
-            .min_height(min_height * self.zoom)
-            .keyed_children(std::iter::once(("editor".to_string(), child)).chain(rules))
-    }
-
-    fn segment(&self, segment: &Segment, only: bool, context: &mut ViewContext<Self>) -> View {
-        match segment {
-            Segment::Flow { id, .. } => {
-                let placeholder = if only {
-                    "Start writing your page…"
-                } else {
-                    ""
-                };
-                self.text_editor(*id, placeholder, 28.0)
-            }
-            Segment::Code { id, language, .. } => {
-                let is_mermaid = language.trim().eq_ignore_ascii_case("mermaid");
-                let title = if is_mermaid {
-                    "Mermaid diagram"
-                } else {
-                    "Code block"
-                };
-                let header = Grid::new()
-                    .columns([
-                        GridLength::Auto,
-                        GridLength::Pixel(180.0),
-                        GridLength::STAR,
-                        GridLength::Auto,
-                    ])
-                    .column_spacing(8.0)
-                    .children((
-                        caption(title).in_column(0),
-                        TextBox::new()
-                            .text(language.clone())
-                            .placeholder_text("Language (optional)")
-                            .on_text_changed(context.callback({
-                                let id = *id;
-                                move |text| Msg::CodeLanguage(id, text)
-                            }))
-                            .grid_column(1),
-                        if is_mermaid {
-                            caption("Renders as a diagram in SharePoint").in_column(2)
-                        } else {
-                            View::empty()
-                        },
-                        delete_button(context, *id, "Remove code block").in_column(3),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 48.0))),
-                )
-            }
-            Segment::Math { id, .. } => {
-                let header = Grid::new()
-                    .columns([GridLength::STAR, GridLength::Auto])
-                    .children((
-                        caption("Equation (LaTeX) – shown as $$ … $$").in_column(0),
-                        delete_button(context, *id, "Remove equation").in_column(1),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 28.0))),
-                )
-            }
-            Segment::Raw { id, .. } => {
-                let header = Grid::new()
-                    .columns([GridLength::STAR, GridLength::Auto])
-                    .children((
-                        caption("Markdown the visual editor keeps as written").in_column(0),
-                        delete_button(context, *id, "Remove").in_column(1),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 28.0))),
-                )
-            }
-            Segment::Table { id, table } => self.table(*id, table, context),
-            Segment::Media { id, media } => self.media(*id, media, context),
-            Segment::Rule { id } => Grid::new()
-                .columns([GridLength::STAR, GridLength::Auto])
-                .column_spacing(8.0)
-                // Tall enough for the remove button (XAML clips what overflows a row), with
-                // negative margins so the divider takes no more room than a blank line.
-                .height(28.0)
-                .margin(Thickness::new(TEXT_INSET.left, -8.0, TEXT_INSET.right, -8.0))
-                .children((
-                    Border::new()
-                        .background(paper().rule)
-                        .height(1.0)
-                        .vertical_alignment(VerticalAlignment::Center)
-                        .grid_column(0),
-                    Button::new()
-                        .style(ButtonStyle::Subtle)
-                        .min_height(0.0)
-                        .height(28.0)
-                        .vertical_alignment(VerticalAlignment::Center)
-                        .on_click(context.message(Msg::Delete(*id)))
-                        .content(
-                            Viewbox::new()
-                                .width(14.0)
-                                .height(14.0)
-                                .slot(ViewboxSlot::Child, symbol(Symbol::Delete)),
-                        )
-                        .tooltip("Remove divider")
-                        .in_column(1),
-                )),
-        }
-    }
-
-    fn table(&self, id: Id, table: &TableState, context: &mut ViewContext<Self>) -> View {
-        let columns = table.columns();
-        let mut cells = Vec::new();
-        for (row, values) in table.cells.iter().enumerate() {
-            for (column, value) in values.iter().enumerate() {
-                let cell = TextBox::new()
-                    .text(value.clone())
-                    .placeholder_text(if row == 0 { "Header" } else { "" })
-                    .text_wrapping(TextWrapping::Wrap)
-                    .background(if row == 0 { paper().card } else { paper().page })
-                    .on_text_changed(context.callback(move |text| Msg::Cell(id, row, column, text)))
-                    .grid_row(row as i32)
-                    .grid_column(column as i32);
-                cells.push(((row * 1000 + column) as u64, cell));
-            }
-        }
-        let grid = Grid::new()
-            .rows(vec![GridLength::Auto; table.cells.len()])
-            .columns(vec![GridLength::STAR; columns.max(1)])
-            .row_spacing(2.0)
-            .column_spacing(2.0)
-            .keyed_children(cells);
-        let actions = StackPanel::new()
-            .orientation(Orientation::Horizontal)
-            .spacing(4.0)
-            .children((
-                text_button(context, "+ Row", Msg::Table(id, TableEdit::AddRow)),
-                text_button(context, "+ Column", Msg::Table(id, TableEdit::AddColumn)),
-                text_button(context, "− Row", Msg::Table(id, TableEdit::RemoveRow)),
-                text_button(context, "− Column", Msg::Table(id, TableEdit::RemoveColumn)),
-                delete_button(context, id, "Remove table"),
-            ));
-        StackPanel::new()
-            .spacing(4.0)
-            .margin(TEXT_INSET.with_vertical(6.0))
-            .children((grid, actions))
-    }
-
-    fn media(&self, id: Id, media: &Media, context: &mut ViewContext<Self>) -> View {
-        let source = media.source().to_string();
-        let preview = if media.is_video() {
-            StackPanel::new()
-                .orientation(Orientation::Horizontal)
-                .spacing(8.0)
-                .children((
-                    symbol(Symbol::Video),
-                    caption("Video – plays in SharePoint"),
-                ))
-        } else if source.starts_with("http://") || source.starts_with("https://") {
-            match Image::new().source(source.clone()) {
-                Ok(image) => image
-                    .stretch(Stretch::Uniform)
-                    .max_height(320.0)
-                    .horizontal_alignment(HorizontalAlignment::Left)
-                    .into(),
-                Err(_) => caption("The picture address is not valid."),
-            }
-        } else {
-            caption(
-                "Use a web address readers can reach – SharePoint does not copy local pictures.",
-            )
-        };
-        let header = Grid::new()
-            .columns([GridLength::STAR, GridLength::Auto])
-            .children((
-                caption(if media.is_video() { "Video" } else { "Picture" }).in_column(0),
-                delete_button(context, id, "Remove").in_column(1),
-            ));
-        card(
-            StackPanel::new().spacing(6.0).children((
-                header,
-                preview,
-                TextBox::new()
-                    .text(source)
-                    .placeholder_text("https://…")
-                    .on_text_changed(context.callback(move |text| Msg::MediaSource(id, text)))
-                    .slot(TextBoxSlot::Header, "Address"),
-                TextBox::new()
-                    .text(media.alt_text().to_string())
-                    .placeholder_text("Describe it for people who can't see it")
-                    .on_text_changed(context.callback(move |text| Msg::MediaAlt(id, text)))
-                    .slot(TextBoxSlot::Header, "Alt text"),
-            )),
-        )
+    /// The page: the editor in a WebView2 (see `page`), on the canvas around it. The page
+    /// lays itself out, zoomed, and scrolls itself; its background is clear, so the canvas
+    /// shows around it.
+    fn page(&self) -> View {
+        Border::new()
+            .background(CANVAS)
+            .content(WebView2::new().element_ref(&self.web))
     }
 
     fn properties_pane(&self, context: &mut ViewContext<Self>) -> View {
@@ -881,13 +456,17 @@ impl Editor {
                     field(context, 1, "Text to display (optional)", ""),
                 )),
             ),
-            DialogKind::Image | DialogKind::Video => (
-                if dialog.kind == DialogKind::Image {
-                    "Insert picture"
-                } else {
-                    "Insert video"
+            DialogKind::Image | DialogKind::Video | DialogKind::EditMedia(_) => (
+                match dialog.kind {
+                    DialogKind::Image => "Insert picture",
+                    DialogKind::Video => "Insert video",
+                    _ => "Picture or video",
                 },
-                "Insert",
+                if matches!(dialog.kind, DialogKind::EditMedia(_)) {
+                    "Save"
+                } else {
+                    "Insert"
+                },
                 StackPanel::new().spacing(12.0).width(420.0).children((
                     field(context, 0, "Address", "https://contoso.sharepoint.com/…"),
                     field(
@@ -1242,32 +821,6 @@ fn band_resources(foreground: Option<Color>, hover: bool) -> ResourceOverrides {
         .set("ButtonForegroundPressed", text)
 }
 
-fn text_button(context: &mut ViewContext<Editor>, text: &str, message: Msg) -> View {
-    Button::new()
-        .style(ButtonStyle::Subtle)
-        .on_click(context.message(message))
-        .content(text.to_string())
-}
-
-fn delete_button(context: &mut ViewContext<Editor>, id: Id, tip: &str) -> View {
-    Button::new()
-        .style(ButtonStyle::Subtle)
-        .on_click(context.message(Msg::Delete(id)))
-        .content(symbol(Symbol::Delete))
-        .tooltip(tip)
-}
-
-fn card(content: View) -> View {
-    Border::new()
-        .background(paper().card)
-        .border_brush(paper().card_border)
-        .border_thickness(Thickness::uniform(1.0))
-        .corner_radius(CornerRadius::uniform(6.0))
-        .padding(Thickness::uniform(10.0))
-        .margin(TEXT_INSET.with_vertical(6.0))
-        .content(content)
-}
-
 /// Grid placement for finished views, which Reactor only offers on concrete controls.
 trait Place {
     fn in_column(self, column: i32) -> View;
@@ -1297,40 +850,6 @@ fn path_icon(data: &str, size: f64) -> View {
         .width(size)
         .height(size)
         .slot(ViewboxSlot::Child, icon)
-}
-
-impl Editor {
-    /// The page is sized from the window rather than stretched: an empty RichEditBox reports a
-    /// width that makes a stretched, width-capped page sit off-center.
-    fn page_width(&self) -> f64 {
-        const MAX: f64 = 900.0;
-        const MIN: f64 = 320.0;
-        let room = self.page_room();
-        // View › Zoom › Page Width: the page fills the room, however wide.
-        if self.page_fit {
-            room.max(MIN)
-        } else {
-            room.clamp(MIN, MAX)
-        }
-    }
-
-    /// The width the page has in the window: less the panes, the page's margins (2 × 24) and
-    /// room for the vertical scroll bar.
-    fn page_room(&self) -> f64 {
-        let chrome = 48.0
-            + 20.0
-            + if self.show_properties {
-                PROPERTIES_WIDTH
-            } else {
-                0.0
-            }
-            + if self.show_navigation {
-                self.explorer_width()
-            } else {
-                0.0
-            };
-        self.window_width - chrome
-    }
 }
 
 impl Editor {
@@ -1612,7 +1131,7 @@ impl Editor {
             .tooltip("Go to this word");
         let chosen = self
             .spelling_choice
-            .get(&(issue.editor, issue.start))
+            .get(&issue.start)
             .copied()
             .unwrap_or(0);
         let suggestions: View = if issue.suggestions.is_empty() {
@@ -1925,7 +1444,7 @@ fn outline_row(
         label.into()
     };
     let button = Button::new()
-        .on_click(context.message(Msg::Navigate(entry.editor, entry.heading.position)))
+        .on_click(context.message(Msg::Navigate(entry.heading.position)))
         .horizontal_alignment(HorizontalAlignment::Stretch)
         .horizontal_content_alignment(HorizontalAlignment::Left);
     let button = if entry.current {

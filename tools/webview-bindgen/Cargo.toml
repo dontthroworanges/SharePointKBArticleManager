@@ -1,5 +1,5 @@
 [package]
-name = "prototype-bindgen"
+name = "webview-bindgen"
 version = "0.0.0"
 edition = "2024"
 publish = false

@@ -1,12 +1,10 @@
-//! Spelling, through the Windows spell checker: the same checker, dictionary and language as
-//! the red squiggles RichEditBox draws, used here to list every misspelling in the
-//! Document Editor's Spelling pane.
+//! Spelling, through the Windows spell checker, for the Document Editor's Spelling pane.
 //!
-//! The editor cannot report its squiggles, so each paragraph's text goes to the checker
-//! (ISpellChecker, from the Windows spell checking API) and each misspelling is then found in
-//! the editor by its word, which gives its exact position even where links add hidden text.
+//! The page's red squiggles cannot be read back, so the page sends its prose as runs of text
+//! at their positions, each paragraph goes to the checker (ISpellChecker, from the Windows
+//! spell checking API), and each misspelling is placed back in the page from the positions
+//! its text came with.
 
-use crate::rich;
 use crate::winui as native;
 use windows_core::{HSTRING, Interface, PWSTR, Result};
 
@@ -133,48 +131,53 @@ fn user_language() -> Option<String> {
     (length > 1).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
 }
 
-/// A misspelling in the page: which editor, where, and what could replace it.
+/// A misspelling in the page: where it is, and what could replace it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Issue {
-    pub editor: super::Id,
+    /// Page positions of the word.
     pub start: i32,
     pub end: i32,
     pub word: String,
     pub suggestions: Vec<String>,
-    /// The text around it, for the pane: (before, word, after).
+    /// The text around it, for the pane.
     pub before: String,
     pub after: String,
 }
 
-/// Every misspelling in one editor, in order, skipping inline code and math.
-pub fn check_editor(
-    checker: &Checker,
-    editor: super::Id,
-    document: &native::RichEditTextDocument,
-) -> Result<Vec<Issue>> {
+/// Every misspelling in the page's prose, in order. `blocks` is what the page sends: for each
+/// paragraph, its runs of text as `{pos, text}` (see `textBlocks` in `web/editor.js`).
+pub fn check_blocks(checker: &Checker, blocks: &serde_json::Value) -> Result<Vec<Issue>> {
     let mut issues = Vec::new();
-    for (start, end, text) in rich::paragraph_texts(document)? {
+    for block in blocks.as_array().into_iter().flatten() {
+        let runs: Vec<(i32, Vec<u16>)> = block
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|run| {
+                Some((
+                    run["pos"].as_i64()? as i32,
+                    run["text"].as_str()?.encode_utf16().collect(),
+                ))
+            })
+            .collect();
+        let paragraph = Paragraph::new(&runs);
+        let text = String::from_utf16_lossy(&paragraph.units);
         // The checker rejects empty text.
         if text.trim().is_empty() {
             continue;
         }
         for misspelling in checker.check(&text)? {
-            // The word is at least this far in: hidden link text only pushes it further.
-            let from = start + misspelling.start as i32;
-            let Some((word_start, word_end)) =
-                rich::find_word(document, from, end, &misspelling.word)?
-            else {
+            let length = misspelling.word.encode_utf16().count();
+            let (Some(start), Some(last)) = (
+                paragraph.position(misspelling.start),
+                paragraph.position(misspelling.start + length.saturating_sub(1)),
+            ) else {
                 continue;
             };
-            if rich::is_code_or_math(document, word_start)? {
-                continue;
-            }
-            let (before, _, after) =
-                rich::snippet(document, word_start, word_end).unwrap_or_default();
+            let (before, after) = paragraph.around(misspelling.start, misspelling.start + length);
             issues.push(Issue {
-                editor,
-                start: word_start,
-                end: word_end,
+                start,
+                end: last + 1,
                 word: misspelling.word,
                 suggestions: misspelling.suggestions,
                 before,
@@ -183,4 +186,68 @@ pub fn check_editor(
         }
     }
     Ok(issues)
+}
+
+/// A paragraph's text, joined from its runs, and where each of its characters is in the page.
+struct Paragraph {
+    units: Vec<u16>,
+    /// The page position of each unit; None for the space put between runs that are not next
+    /// to each other (around a line break or an equation), so words do not run together.
+    positions: Vec<Option<i32>>,
+}
+
+impl Paragraph {
+    fn new(runs: &[(i32, Vec<u16>)]) -> Self {
+        let mut units = Vec::new();
+        let mut positions = Vec::new();
+        let mut next = None;
+        for (pos, text) in runs {
+            if next.is_some_and(|next| next != *pos) {
+                units.push(u16::from(b' '));
+                positions.push(None);
+            }
+            for (index, unit) in text.iter().enumerate() {
+                units.push(*unit);
+                positions.push(Some(pos + index as i32));
+            }
+            next = Some(pos + text.len() as i32);
+        }
+        Self { units, positions }
+    }
+
+    fn position(&self, offset: usize) -> Option<i32> {
+        self.positions.get(offset).copied().flatten()
+    }
+
+    /// Up to 30 characters before and 40 after a range, for the pane.
+    fn around(&self, start: usize, end: usize) -> (String, String) {
+        let before = String::from_utf16_lossy(&self.units[..start.min(self.units.len())]);
+        let after = String::from_utf16_lossy(&self.units[end.min(self.units.len())..]);
+        let before: String = before.chars().rev().take(30).collect::<Vec<_>>().into_iter().rev().collect();
+        let after: String = after.chars().take(40).collect();
+        (before.trim_start().to_string(), after.trim_end().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runs_keep_their_positions_and_gaps_become_spaces() {
+        let runs = vec![
+            (1, "Hello ".encode_utf16().collect()),
+            (7, "wor".encode_utf16().collect()),
+            (10, "ld".encode_utf16().collect()),
+            // After a line break (one position).
+            (13, "again".encode_utf16().collect()),
+        ];
+        let paragraph = Paragraph::new(&runs);
+        assert_eq!(String::from_utf16_lossy(&paragraph.units), "Hello world again");
+        assert_eq!(paragraph.position(6), Some(7));
+        assert_eq!(paragraph.position(10), Some(11));
+        assert_eq!(paragraph.position(11), None);
+        assert_eq!(paragraph.position(12), Some(13));
+        assert_eq!(paragraph.around(6, 11), ("Hello ".to_string(), " again".to_string()));
+    }
 }

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <main class="canvas">
+    <article class="page" id="page">
+      <div id="visual"></div>
+      <textarea id="source" hidden spellcheck="false" wrap="off" aria-label="Markdown"></textarea>
+      <div class="table-tools" id="table-tools" hidden contenteditable="false">
+        <button data-table="addRowAfter" title="Add a row below">+ Row</button>
+        <button data-table="addColumnAfter" title="Add a column to the right">+ Column</button>
+        <button data-table="deleteRow" title="Remove this row">− Row</button>
+        <button data-table="deleteColumn" title="Remove this column">− Column</button>
+        <button data-table="deleteTable" title="Remove the table">Remove table</button>
+      </div>
+    </article>
+  </main>
+  <script type="module" src="editor.js"></script>
+</body>
+</html>

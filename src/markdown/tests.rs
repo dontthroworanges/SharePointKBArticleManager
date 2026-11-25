@@ -81,7 +81,6 @@ fn media() {
     };
     assert_eq!(media.source(), "https://contoso.com/a_b_c.png");
     assert_eq!(media.alt_text(), "A *diagram*.");
-    assert!(!media.is_video());
 }
 
 #[test]

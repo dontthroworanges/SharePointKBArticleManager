@@ -65,13 +65,6 @@ impl Paragraph {
     pub fn is_empty(&self) -> bool {
         self.inlines.iter().all(|inline| inline.text.is_empty())
     }
-
-    pub fn plain_text(&self) -> String {
-        self.inlines
-            .iter()
-            .map(|inline| inline.text.as_str())
-            .collect()
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -214,15 +207,4 @@ impl Media {
         self.get("alt-text")
     }
 
-    pub fn is_video(&self) -> bool {
-        let source = self.source().to_ascii_lowercase();
-        let path = source.split(['?', '#']).next().unwrap_or_default();
-        [".mp4", ".webm", ".mov", ".m4v", ".avi", ".wmv"]
-            .iter()
-            .any(|extension| path.ends_with(extension))
-            || source.contains("youtube.com/")
-            || source.contains("youtu.be/")
-            || source.contains("vimeo.com/")
-            || source.contains("microsoftstream.com/")
-    }
 }

@@ -64,22 +64,3 @@ fn style_items(items: &native::IItemContainerMapping) -> bool {
     }
     all
 }
-
-/// Gives the text of an open menu item that look. The item's template sets its label's font
-/// size itself, so the label TextBlock inside it is styled directly.
-pub fn style_menu_label(item: &IUnknown, index: usize) -> Result<()> {
-    let Some(&(size, weight)) = LOOKS.get(index) else {
-        return Ok(());
-    };
-    let mut pending: Vec<native::DependencyObject> = vec![item.cast()?];
-    while let Some(element) = pending.pop() {
-        if let Ok(text) = element.cast::<native::ITextBlock>() {
-            text.SetFontSize(size)?;
-            text.SetFontWeight(native::FontWeight { weight })?;
-        }
-        for child in 0..native::VisualTreeHelper::GetChildrenCount(&element)? {
-            pending.push(native::VisualTreeHelper::GetChild(&element, child)?);
-        }
-    }
-    Ok(())
-}

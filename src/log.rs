@@ -23,12 +23,6 @@ pub fn write(line: std::fmt::Arguments) {
     }
 }
 
-/// Whether a diagnostic switch is on: the environment variable `name` is set to anything but
-/// `0`. Used to turn suspects off one at a time while measuring typing speed.
-pub fn switch(name: &str) -> bool {
-    std::env::var(name).is_ok_and(|value| value != "0")
-}
-
 /// Whether timing is being recorded (`KB_EDITOR_LOG` is set).
 pub fn enabled() -> bool {
     path().is_some()

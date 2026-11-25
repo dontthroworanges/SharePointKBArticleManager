@@ -458,7 +458,7 @@ mod tests {
     /// Tiptap is handed is all it needs to give the file back unchanged.
     #[test]
     fn samples_round_trip() {
-        let samples = concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples");
+        let samples = concat!(env!("CARGO_MANIFEST_DIR"), "/samples");
         let mut checked = 0;
         for entry in std::fs::read_dir(samples).expect("samples folder") {
             let path = entry.unwrap().path();
