@@ -1,9 +1,15 @@
 name: Release
 
-# Push a tag such as v0.5.0 to build the app and publish it as a GitHub release.
+# Push a tag such as v0.5.0 or Beta-v0.5.0 to build the app and publish it as a GitHub release.
+# Run it by hand (Actions > Release > Run workflow) to build a tag that already exists.
 on:
   push:
-    tags: ["v*"]
+    tags: ["v[0-9]*", "*-v[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to release
+        required: true
 
 permissions:
   contents: write
@@ -16,13 +22,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
       - name: Check the tag matches Cargo.toml
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $tag = "${{ inputs.tag || github.ref_name }}" -replace "^.*?v(?=d)", ""
           $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
             Where-Object name -eq 'kb-editor' | ForEach-Object version
           if ($tag -ne $version) { throw "Tag v$tag does not match Cargo.toml version $version" }
@@ -51,4 +59,8 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" "$env:ASSET" --title "${{ github.ref_name }}" --generate-notes
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.tag || github.ref_name }}"
+          $pre = @(); if ($tag -match "beta|rc|alpha") { $pre = @("--prerelease") }
+          gh release create $tag "$env:ASSET" --verify-tag --title $tag --generate-notes @pre
