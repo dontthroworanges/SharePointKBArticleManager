@@ -1,0 +1,313 @@
+/* The page as SharePoint shows a Knowledge Base article.
+ *
+ * Every size is in rem, and 1rem is 16px at 100%: zooming sets the root font size, so text
+ * is laid out at its zoomed size (as Word zooms) rather than scaled when drawn. The window
+ * around the page shows through (the page's background is transparent), so the area around
+ * the page follows the app's own theme. */
+:root {
+  --zoom: 1;
+  --body-size: 0.875rem;
+  --page: #ffffff;
+  --border: #e1e1e1;
+  --text: #323130;
+  --muted: #605e5c;
+  --quote: #605e5c;
+  --link: #0078d4;
+  --rule: #c8c6c4;
+  --heading-rule: #edebe9;
+  --card: #f6f8fa;
+  --card-border: #d8dee4;
+  --code-bg: #f3f2f1;
+  --math-bg: #eef0ff;
+  --highlight: #fff176;
+  --selected: #c7e0f4;
+  --find: #fde68a;
+  --find-current: #f59e0b;
+  --accent: #0f6cbd;
+  font-size: calc(16px * var(--zoom));
+}
+
+/* A shade lighter than the dark window around it, so the page stands out from it. */
+:root.dark-page {
+  --page: #2b2b2b;
+  --border: #3d3d3d;
+  --text: #f3f2f1;
+  --muted: #c8c6c4;
+  --quote: #c8c6c4;
+  --link: #479ef5;
+  --rule: #605e5c;
+  --heading-rule: #403e3d;
+  --card: #333231;
+  --card-border: #4a4846;
+  --code-bg: #3a3938;
+  --math-bg: #2b2e45;
+  --highlight: #6b5e00;
+  --selected: #264f78;
+  --find: #6b5e00;
+  --find-current: #b45309;
+}
+
+html, body {
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: "Segoe UI", "Segoe UI Web (West European)", system-ui, sans-serif;
+}
+
+.canvas {
+  /* As the app's page margins: 24px around the page. */
+  padding: 24px;
+}
+
+.page {
+  position: relative;
+  box-sizing: border-box;
+  margin: 0 auto;
+  background: var(--page);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3rem 4rem;
+  font-size: var(--body-size);
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------- the visual page */
+
+.ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  caret-color: var(--text);
+}
+
+.ProseMirror p { margin: 0 0 0.6em; }
+.ProseMirror > :last-child { margin-bottom: 0; }
+
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3,
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 {
+  margin: 1em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.ProseMirror > :first-child { margin-top: 0; }
+/* SharePoint's heading sizes: 28, 24, 20 and 18px; 5 and 6 at body size. */
+.ProseMirror h1 { font-size: 1.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--heading-rule); }
+.ProseMirror h2 { font-size: 1.5rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--heading-rule); }
+.ProseMirror h3 { font-size: 1.25rem; }
+.ProseMirror h4 { font-size: 1.125rem; }
+.ProseMirror h5, .ProseMirror h6 { font-size: var(--body-size); }
+
+.ProseMirror a { color: var(--link); text-decoration: underline; cursor: text; }
+.ProseMirror a.page-link { text-decoration-style: dashed; }
+
+.ProseMirror mark { background: var(--highlight); color: inherit; padding: 0 1px; }
+.ProseMirror s { text-decoration-thickness: 1px; }
+
+.ProseMirror code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.92em;
+  background: var(--code-bg);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.ProseMirror blockquote {
+  margin: 0 0 0.6em;
+  padding-left: 0.875rem;
+  border-left: 3px solid var(--rule);
+  color: var(--quote);
+}
+
+/* Each level indents 18pt, as the app's lists did. */
+.ProseMirror ul, .ProseMirror ol { padding-left: 1.5rem; margin: 0 0 0.6em; }
+.ProseMirror li > p { margin: 0; }
+.ProseMirror li > ul, .ProseMirror li > ol { margin: 0; }
+
+.ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0.25rem; }
+.ProseMirror ul[data-type="taskList"] li { display: flex; gap: 0.5rem; align-items: flex-start; }
+.ProseMirror ul[data-type="taskList"] li > label { margin-top: 0.15em; user-select: none; }
+.ProseMirror ul[data-type="taskList"] li > div { flex: 1; min-width: 0; }
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div { color: var(--muted); }
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 1.25em 0;
+  padding: 4px 0;
+  background-clip: content-box;
+}
+.ProseMirror hr.ProseMirror-selectednode { border-top-color: var(--accent); }
+
+/* Tables */
+.ProseMirror .tableWrapper { overflow-x: auto; margin: 0 0 0.6em; }
+.ProseMirror table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+.ProseMirror th, .ProseMirror td {
+  border: 1px solid var(--card-border);
+  padding: 0.375rem 0.625rem;
+  vertical-align: top;
+  position: relative;
+  min-width: 3em;
+}
+.ProseMirror th { background: var(--card); font-weight: 600; text-align: left; }
+.ProseMirror th > p, .ProseMirror td > p { margin: 0; }
+.ProseMirror .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--selected);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.table-tools {
+  position: absolute;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--page);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  z-index: 5;
+  font-size: 12px;
+}
+.table-tools[hidden] { display: none; }
+
+/* Search results and the current one */
+.find-match { background: var(--find); border-radius: 2px; }
+.find-current { background: var(--find-current); color: #000; border-radius: 2px; }
+
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #a19f9d;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- blocks with a card */
+
+.card {
+  margin: 0.375rem 0 0.75rem;
+  padding: 0.625rem;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+.card.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+  color: var(--muted);
+  font: 0.75rem "Segoe UI", sans-serif;
+  user-select: none;
+}
+.card-header .title { flex: 0 0 auto; }
+.card-header .note { flex: 1 1 auto; }
+.card-header input {
+  width: 11rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text);
+  background: var(--page);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+.card textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--page);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 0.375rem 0.5rem;
+}
+.card .media-fields { display: grid; gap: 0.375rem; }
+
+button.remove, .table-tools button, .card button.edit {
+  font: 12px "Segoe UI", sans-serif;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: default;
+}
+button.remove:hover, .table-tools button:hover, .card button.edit:hover {
+  background: var(--code-bg);
+  border-color: var(--card-border);
+}
+button.remove { margin-left: auto; }
+
+.code-card pre {
+  margin: 0;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  background: var(--page);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 0.5rem 0.625rem;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text);
+}
+.code-card pre code { background: none; padding: 0; font-size: inherit; border-radius: 0; }
+
+.media-preview { margin: 0.25rem 0 0.5rem; }
+.media-preview img { max-width: 100%; max-height: 20rem; height: auto; display: block; }
+.media-preview .caption { color: var(--muted); }
+
+/* Inline math and inline Markdown kept as written */
+.math-inline, .raw-inline {
+  border-radius: 3px;
+  padding: 0 3px;
+  cursor: default;
+}
+.math-inline { font-family: "Cambria Math", Cambria, serif; background: var(--math-bg); }
+.raw-inline { font-family: "Cascadia Mono", Consolas, monospace; font-size: 0.9em; color: var(--muted); background: var(--code-bg); }
+.math-inline.ProseMirror-selectednode, .raw-inline.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.inline-edit {
+  font: inherit;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.9em;
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0 3px;
+  color: var(--text);
+  background: var(--page);
+}
+
+/* ---------------------------------------------------------------- the Markdown source */
+
+#source {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 25rem;
+  resize: none;
+  overflow: hidden;
+  border: none;
+  outline: none;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.8333rem;
+  line-height: 1.5;
+  /* Long lines wrap at the page's edge, as in Notepad with word wrap on. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+#source[hidden] { display: none; }

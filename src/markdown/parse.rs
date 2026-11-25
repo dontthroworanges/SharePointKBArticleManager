@@ -21,6 +21,45 @@ pub fn parse(source: &str) -> Document {
     parser.document
 }
 
+/// A heading in Markdown source, for the Navigation pane in the Markdown view.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SourceHeading {
+    pub level: u8,
+    /// The heading's text, without its Markdown.
+    pub text: String,
+    /// The line it starts on, from 0.
+    pub line: usize,
+}
+
+/// The headings of Markdown `source`, in order. Parsed as a page is, so `#` lines in code
+/// blocks and front matter are not headings, and underlined (setext) headings are.
+pub fn headings(source: &str) -> Vec<SourceHeading> {
+    let source = source.replace("\r\n", "\n");
+    let arena = Arena::new();
+    let root = parse_document(&arena, &source, &options());
+    root.descendants()
+        .filter_map(|node| {
+            let NodeValue::Heading(heading) = node.data().value.clone() else {
+                return None;
+            };
+            let mut text = String::new();
+            for part in node.descendants() {
+                match &part.data().value {
+                    NodeValue::Text(literal) => text.push_str(literal),
+                    NodeValue::Code(code) => text.push_str(&code.literal),
+                    NodeValue::SoftBreak | NodeValue::LineBreak => text.push(' '),
+                    _ => {}
+                }
+            }
+            Some(SourceHeading {
+                level: heading.level,
+                text: text.trim().to_string(),
+                line: node.data().sourcepos.start.line.saturating_sub(1),
+            })
+        })
+        .collect()
+}
+
 pub(crate) fn options() -> Options<'static> {
     let mut options = Options::default();
     let extension = &mut options.extension;

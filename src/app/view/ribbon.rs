@@ -122,9 +122,11 @@ impl Editor {
     /// The selected tab's commands, laid out for the chosen ribbon layout.
     pub(super) fn ribbon_items(&self, context: &mut ViewContext<Self>) -> Vec<Item> {
         let groups = match self.tab {
+            Tab::File => self.file_groups(),
             Tab::Home => self.home_groups(context),
             Tab::Insert => self.insert_groups(),
             Tab::View => self.view_groups(context),
+            Tab::Help => help_groups(),
         };
         match self.ribbon_layout {
             RibbonLayout::SingleLine => single_line(context, groups),
@@ -174,6 +176,58 @@ impl Editor {
                 ],
                 context.callback(Msg::RibbonLayout),
             ))
+    }
+
+    /// The File tab: new, open and save, as Word for the web's File tab offers them.
+    fn file_groups(&self) -> Vec<Group> {
+        vec![
+            Group::new(
+                "File",
+                Shape::Large,
+                tools([
+                    Tool::new(
+                        Icon::Path(icons::NEW_PAGE),
+                        "New page",
+                        "Start a new, empty page (Ctrl+N)",
+                        Command::New,
+                    )
+                    .labeled(),
+                    Tool::new(
+                        Icon::Path(icons::OPEN),
+                        "Open…",
+                        "Open a Markdown file (Ctrl+O)",
+                        Command::Open,
+                    )
+                    .labeled(),
+                    // Only a page saved to a file has a name to change.
+                    Tool::new(
+                        Icon::Path(icons::RENAME),
+                        "Rename…",
+                        "Rename the open file",
+                        Command::Rename,
+                    )
+                    .enabled(self.path.is_some())
+                    .labeled(),
+                ]),
+            ),
+            Group::new(
+                "Save",
+                Shape::Large,
+                tools([
+                    // Greyed out while the file on disk already matches the page.
+                    Tool::new(Icon::Path(icons::SAVE), "Save", "Save (Ctrl+S)", Command::Save)
+                        .enabled(self.dirty)
+                        .labeled(),
+                    Tool::new(
+                        Icon::Path(icons::SAVE_AS),
+                        "Save as…",
+                        "Save to a new file (Ctrl+Shift+S)",
+                        Command::SaveAs,
+                    )
+                    .labeled(),
+                ]),
+            ),
+        ]
     }
 
     fn home_groups(&self, context: &mut ViewContext<Self>) -> Vec<Group> {
@@ -472,20 +526,34 @@ impl Editor {
                 .labeled()
         };
         let percent = (self.zoom * 100.0).round() as u16;
-        let preset = ZOOM_PRESETS.iter().position(|&p| p == percent);
+        // Page Width comes after the percentages, as in Word's Zoom box.
+        let preset = if self.page_fit {
+            Some(ZOOM_PRESETS.len())
+        } else {
+            ZOOM_PRESETS.iter().position(|&p| p == percent)
+        };
         let zoom_box = Item::new(
             ComboBox::new()
-                .items_source(ZOOM_PRESETS.iter().map(|p| format!("{p}%")))
+                .items_source(
+                    ZOOM_PRESETS
+                        .iter()
+                        .map(|p| format!("{p}%"))
+                        .chain(std::iter::once(PAGE_WIDTH.to_string())),
+                )
                 .selected_index(preset)
                 // A zoom between presets shows as the box's placeholder.
                 .placeholder_text(format!("{percent}%"))
                 .on_selection_changed(context.callback(Msg::ZoomPreset))
-                .width(96.0)
+                .width(120.0)
                 .vertical_alignment(VerticalAlignment::Center)
                 .tooltip("Zoom"),
-            96.0,
+            120.0,
             vec![Entry::Submenu {
-                label: format!("Zoom ({percent}%)"),
+                label: if self.page_fit {
+                    format!("Zoom ({PAGE_WIDTH})")
+                } else {
+                    format!("Zoom ({percent}%)")
+                },
                 entries: ZOOM_PRESETS
                     .iter()
                     .map(|&p| {
@@ -493,9 +561,15 @@ impl Editor {
                             &format!("{p}%"),
                             Command::Zoom(Zoom::To(p)),
                             true,
-                            p == percent,
+                            !self.page_fit && p == percent,
                         )
                     })
+                    .chain(std::iter::once(Entry::command(
+                        PAGE_WIDTH,
+                        Command::Zoom(Zoom::PageWidth),
+                        true,
+                        self.page_fit,
+                    )))
                     .collect(),
             }],
         );
@@ -625,6 +699,34 @@ impl Editor {
             ),
         ]
     }
+}
+
+/// The Help tab: Settings › About, and Microsoft's guide to knowledge base articles.
+fn help_groups() -> Vec<Group> {
+    vec![
+        Group::new(
+            "About",
+            Shape::Large,
+            tools([Tool::new(
+                Icon::Path(icons::INFO),
+                "About",
+                "The version, what the app is, and where the project lives (Settings › About)",
+                Command::About,
+            )
+            .labeled()]),
+        ),
+        Group::new(
+            "Help",
+            Shape::Large,
+            tools([Tool::new(
+                Icon::Path(icons::HELP),
+                "Microsoft Resources",
+                "Microsoft Support: create and edit a knowledge base manually (opens in your browser)",
+                Command::OpenUrl(KB_HELP_URL),
+            )
+            .labeled()]),
+        ),
+    ]
 }
 
 /// The single-line ribbon: every command in one row, groups split by separators.

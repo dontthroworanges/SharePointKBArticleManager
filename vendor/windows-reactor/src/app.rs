@@ -427,9 +427,27 @@ impl LivePump for ComponentLoop {
     }
 
     fn dispatch_events(&mut self) -> Result<(), PumpError> {
+        // kb-editor patch: each phase timed into the app's log (see `crate::perf_log`).
+        let timing = perf_enabled();
+        let started = std::time::Instant::now();
         self.pump.dispatch_events()?;
-        self.pump.dispatch_components(64)?;
-        self.pump.process_imperatives().map(|_| ())
+        let events = started.elapsed();
+        let dispatched = self.pump.dispatch_components(64)?;
+        let components = started.elapsed();
+        let result = self.pump.process_imperatives().map(|_| ());
+        let total = started.elapsed();
+        if timing && dispatched > 0 {
+            let ms = |d: std::time::Duration| d.as_secs_f64() * 1000.0;
+            perf_log(format_args!(
+                "turn: {dispatched} messages, total {:.2} ms (native events {:.2}, \
+                 update + compose {:.2}, imperatives {:.2})",
+                ms(total),
+                ms(events),
+                ms(components - events),
+                ms(total - components),
+            ));
+        }
+        result
     }
 
     fn drain_diagnostics(&mut self) -> Vec<PumpDiagnostic> {

@@ -4,6 +4,7 @@ use super::*;
 
 pub(super) mod icons;
 mod ribbon;
+mod settings_page;
 
 // The window around the page follows the light or dark theme through WinUI's theme brushes.
 // Mica (the window backdrop) shows through the ribbon, panes and status bar; the area around
@@ -11,46 +12,13 @@ mod ribbon;
 const CANVAS: ThemeBrush = ThemeBrush::Layer;
 /// Where the app's name starts: in line with the File tab's label below it.
 const TITLE_INSET: f64 = 20.0;
+/// Where the app's name starts while the title bar shows its back button.
+const BACK_BUTTON_INSET: f64 = 52.0;
 /// Room either side of the centered document name: enough for the app's name and version on
 /// the left, and more than the window buttons on the right.
 const CENTERED_TITLE_MARGIN: f64 = 240.0;
 const DIVIDER: ThemeBrush = ThemeBrush::Divider;
 const MUTED: ThemeBrush = ThemeBrush::SecondaryText;
-/// The page and what is on it: white like paper in both themes, unless View › Switch
-/// Background darkens it, as in Word.
-#[derive(Clone, Copy)]
-struct Paper {
-    page: Color,
-    border: Color,
-    card: Color,
-    card_border: Color,
-    rule: Color,
-}
-
-const LIGHT_PAPER: Paper = Paper {
-    page: Color::rgb(0xFF, 0xFF, 0xFF),
-    border: Color::rgb(0xE1, 0xE1, 0xE1),
-    card: Color::rgb(0xF6, 0xF8, 0xFA),
-    card_border: Color::rgb(0xD8, 0xDE, 0xE4),
-    rule: Color::rgb(0xC8, 0xC6, 0xC4),
-};
-
-const DARK_PAPER: Paper = Paper {
-    page: Color::rgb(0x1F, 0x1F, 0x1F),
-    border: Color::rgb(0x3B, 0x3A, 0x39),
-    card: Color::rgb(0x29, 0x28, 0x27),
-    card_border: Color::rgb(0x48, 0x46, 0x44),
-    rule: Color::rgb(0x60, 0x5E, 0x5C),
-};
-
-/// The page colors in use, which follow the text colors `rich` styles with.
-fn paper() -> Paper {
-    if rich::page_colors() == rich::DARK_PAGE {
-        DARK_PAPER
-    } else {
-        LIGHT_PAPER
-    }
-}
 /// The Document Editor's width limits; the user sets the width by dragging its edge.
 const NAVIGATION_MIN: f64 = 200.0;
 const NAVIGATION_MAX: f64 = 640.0;
@@ -58,76 +26,29 @@ const NAVIGATION_MAX: f64 = 640.0;
 const PAGE_MIN_ROOM: f64 = 420.0;
 const PROPERTIES_WIDTH: f64 = 320.0;
 
-/// Horizontal inset of RichEditBox text (its default theme padding), so objects line up with it.
-const TEXT_INSET: Inset = Inset {
-    left: 10.0,
-    right: 6.0,
-};
-
-#[derive(Clone, Copy)]
-struct Inset {
-    left: f64,
-    right: f64,
-}
-
-impl Inset {
-    fn with_vertical(self, vertical: f64) -> Thickness {
-        Thickness::new(self.left, vertical, self.right, vertical)
-    }
-}
-
-/// Theme resources that make a RichEditBox read as part of the page: no border, no
-/// background, and no focus underline.
-pub fn borderless_editor() -> ResourceOverrides {
-    let clear = Color::transparent();
-    let mut resources = ResourceOverrides::new();
-    for key in [
-        "TextControlBackground",
-        "TextControlBackgroundPointerOver",
-        "TextControlBackgroundFocused",
-        "TextControlBackgroundDisabled",
-        "TextControlBorderBrush",
-        "TextControlBorderBrushPointerOver",
-        "TextControlBorderBrushFocused",
-        "TextControlBorderBrushDisabled",
-    ] {
-        resources = resources.set(key, clear);
-    }
-    // SharePoint's text color, which the document's automatic text color follows.
-    let text = rich::page_colors().text;
-    let text = Color::argb(text.a, text.r, text.g, text.b);
-    for key in [
-        "TextControlForeground",
-        "TextControlForegroundPointerOver",
-        "TextControlForegroundFocused",
-        "TextControlForegroundDisabled",
-    ] {
-        resources = resources.set(key, text);
-    }
-    // Only brushes: overriding the border thickness resources crashes XAML when the box takes
-    // focus. A transparent border and underline are invisible at any thickness.
-    resources
-}
-
 impl Editor {
     pub(super) fn render(&self, context: &mut ViewContext<Self>) -> View {
         theme::set_current(self.palette());
         context.window_title(self.title());
-        context.window_visuals(
-            WindowVisuals::new()
-                .theme(match self.theme {
-                    theme::ThemeChoice::System => WindowTheme::System,
-                    theme::ThemeChoice::Light => WindowTheme::Light,
-                    theme::ThemeChoice::Dark => WindowTheme::Dark,
-                })
-                .backdrop(WindowBackdrop::Mica)
-                .client_size(1280.0, 860.0),
-        );
+        let visuals = WindowVisuals::new()
+            .theme(match self.theme {
+                theme::ThemeChoice::System => WindowTheme::System,
+                theme::ThemeChoice::Light => WindowTheme::Light,
+                theme::ThemeChoice::Dark => WindowTheme::Dark,
+            })
+            .backdrop(WindowBackdrop::Mica)
+            .client_size(1280.0, 860.0);
+        // Without the file (no APPDATA, or it cannot be written) the window keeps WinUI's icon.
+        context.window_visuals(match window_icon_path() {
+            Some(path) => visuals.icon(path),
+            None => visuals,
+        });
         context.on_window_size(context.callback(Msg::WindowSize));
         context.on_color_scheme(context.callback(Msg::ColorScheme));
+        // The page starts once its WebView2 is on screen.
         let sender = context.sender();
-        context.use_effect("attach", self.generation, move || {
-            sender.send(Msg::Attach);
+        context.use_effect("page", (), move || {
+            sender.send(Msg::PageInit);
             None
         });
         // The Styles box is (re)built when the ribbon is: style its list as soon as it exists,
@@ -147,20 +68,6 @@ impl Editor {
                 None
             },
         );
-        let page = self.page.clone();
-        let dark_page = self.dark_page;
-        context.use_effect("page-theme", (self.generation, dark_page), move || {
-            _ = page.request_native_object(move |result| {
-                if let Err(error) = result
-                    .map_err(|error| format!("{error:?}"))
-                    .and_then(|object| theme::set_page_theme(&object, dark_page).map_err(|e| e.to_string()))
-                {
-                    crate::log::log!("could not set the page theme: {error}");
-                }
-            });
-            None
-        });
-
         // Navigation pane | page | Properties pane, as in Word.
         let body = Grid::new()
             .columns([
@@ -182,7 +89,7 @@ impl Editor {
                 } else {
                     View::empty()
                 },
-                self.page(context).in_column(1),
+                self.page().in_column(1),
                 if self.show_properties {
                     self.properties_pane(context).in_column(2)
                 } else {
@@ -190,9 +97,21 @@ impl Editor {
                 },
             ));
 
+        let (title, tabs) = self.title_band(context);
+        // Settings covers everything below the title bar, as in Notepad. The page stays under
+        // it, so its editors keep their content and undo history.
+        let settings = match self.settings {
+            Some(category) => Border::new()
+                .grid_row(1)
+                .grid_row_span(5)
+                .background(ThemeBrush::SolidBackground)
+                .content(self.settings_page(category, context)),
+            None => View::empty(),
+        };
         Grid::new()
             .element_ref(&self.root)
             .rows([
+                GridLength::Auto,
                 GridLength::Auto,
                 GridLength::Auto,
                 GridLength::Auto,
@@ -200,8 +119,9 @@ impl Editor {
                 GridLength::Auto,
             ])
             .children((
-                self.title_band(context).in_row(0),
-                self.ribbon(context).in_row(1),
+                title.in_row(0),
+                tabs.in_row(1),
+                self.ribbon(context).in_row(2),
                 // Problems show here, above the page, until closed. Always there, opened and
                 // closed, so the layout below does not change shape.
                 InfoBar::new()
@@ -210,16 +130,17 @@ impl Editor {
                     .is_open(self.problem.is_some())
                     .is_closable(true)
                     .on_closed(context.message(Msg::DismissProblem))
-                    .grid_row(2),
-                body.in_row(3),
-                self.status_bar(context).in_row(4),
+                    .grid_row(3),
+                body.in_row(4),
+                self.status_bar(context).in_row(5),
+                settings,
                 self.dialog(context),
             ))
     }
 
     /// The window title, with the File menu and the ribbon tabs below it, on the Mica backdrop
     /// like the rest of the window. The selected tab is underlined in the accent color.
-    fn title_band(&self, context: &mut ViewContext<Self>) -> View {
+    fn title_band(&self, context: &mut ViewContext<Self>) -> (View, View) {
         let palette = theme::current();
         // The app's name and version sit at the left, lined up with the File tab below; the
         // document's name is centered. Both are laid over the whole width, not put in the
@@ -229,10 +150,25 @@ impl Editor {
         let app = StackPanel::new()
             .orientation(Orientation::Horizontal)
             .spacing(6.0)
-            .margin(Thickness::new(TITLE_INSET, 0.0, 0.0, 0.0))
+            // Right of the back button while Settings shows.
+            .margin(Thickness::new(
+                if self.settings.is_some() {
+                    BACK_BUTTON_INSET
+                } else {
+                    TITLE_INSET
+                },
+                0.0,
+                0.0,
+                0.0,
+            ))
             .horizontal_alignment(HorizontalAlignment::Left)
             .vertical_alignment(VerticalAlignment::Center)
             .children((
+                Image::new()
+                    .source_data(EncodedImage::from_static(APP_ICON_SMALL))
+                    .width(16.0)
+                    .height(16.0)
+                    .margin(Thickness::new(0.0, 0.0, 4.0, 0.0)),
                 TextBlock::new()
                     .text(APP_NAME)
                     .foreground(palette.on_band)
@@ -243,7 +179,10 @@ impl Editor {
                     .font_size(12.0),
             ));
         let title = Grid::new().background(palette.band_fill).children((
-            TitleBar::new(),
+            // Settings has a back button at the top left, as in Notepad.
+            TitleBar::new()
+                .is_back_button_visible(self.settings.is_some())
+                .on_back_requested(context.message(Msg::CloseSettings)),
             app,
             TextBlock::new()
                 .text(self.document_title())
@@ -255,30 +194,12 @@ impl Editor {
                 .horizontal_alignment(HorizontalAlignment::Center)
                 .vertical_alignment(VerticalAlignment::Center),
         ));
-        let file = Button::new()
-            .resource_overrides(band_resources(None, true))
-            .content(tab_label("File", false))
-            .menu(Menu::new(
-                [
-                    MenuItem::item("new", FILE_MENU[0].0),
-                    MenuItem::item("open", FILE_MENU[1].0),
-                    MenuItem::separator("s1"),
-                    // Greyed out while the file on disk already matches the page.
-                    if self.dirty {
-                        MenuItem::item("save", FILE_MENU[2].0)
-                    } else {
-                        MenuItem::disabled("save", FILE_MENU[2].0)
-                    },
-                    MenuItem::item("save-as", FILE_MENU[3].0),
-                    MenuItem::separator("s2"),
-                    MenuItem::item("about", FILE_MENU[4].0),
-                ],
-                context.callback(Msg::FileMenu),
-            ));
         let tabs = [
+            ("File", Tab::File),
             ("Home", Tab::Home),
             ("Insert", Tab::Insert),
             ("View", Tab::View),
+            ("Help", Tab::Help),
         ]
         .into_iter()
         .map(|(label, tab)| {
@@ -316,21 +237,36 @@ impl Editor {
         };
         let mut cells = vec![
             ("start".to_string(), cell(0, View::empty(), false)),
-            ("file".to_string(), cell(1, file, false)),
         ];
         for (index, (key, button, selected)) in tabs.into_iter().enumerate() {
-            cells.push((key, cell(index + 2, button, selected)));
+            cells.push((key, cell(index + 1, button, selected)));
         }
         let rest = cells.len();
         cells.push(("rest".to_string(), cell(rest, View::empty(), false)));
+        // The Settings gear, held at the right edge of the window above the ribbon's layout
+        // chevron: the same width, and the same margin from the edge as the ribbon's padding.
+        let gear = Button::new()
+            .resource_overrides(band_resources(None, true))
+            .on_click(context.message(Msg::OpenSettings))
+            .width(40.0)
+            .min_width(0.0)
+            .margin(Thickness::new(0.0, 0.0, 8.0, 0.0))
+            .horizontal_alignment(HorizontalAlignment::Right)
+            .vertical_alignment(VerticalAlignment::Stretch)
+            .content(path_icon(icons::SETTINGS, 18.0))
+            .tooltip("Settings");
+        cells.push((
+            format!("gear-{}", theme::current().dark),
+            cell(rest + 1, gear.into(), false),
+        ));
         let row = Grid::new()
             .columns(
                 std::iter::once(GridLength::Pixel(8.0))
                     .chain(std::iter::repeat_n(GridLength::Auto, rest - 1))
-                    .chain(std::iter::once(GridLength::STAR)),
+                    .chain([GridLength::STAR, GridLength::Auto]),
             )
             .keyed_children(cells);
-        StackPanel::new().children((title, row))
+        (title.into(), row.into())
     }
 
     fn ribbon(&self, context: &mut ViewContext<Self>) -> View {
@@ -372,273 +308,13 @@ impl Editor {
             .content(commands)
     }
 
-    fn page(&self, context: &mut ViewContext<Self>) -> View {
-        let content = match self.mode {
-            Mode::Visual => {
-                let only_empty = self.segments.len() == 1;
-                StackPanel::new().spacing(4.0).keyed_children(
-                    self.segments
-                        .iter()
-                        .map(|segment| (segment.id(), self.segment(segment, only_empty, context)))
-                        .collect::<Vec<_>>(),
-                )
-            }
-            Mode::Source => match self.source_id {
-                Some(id) => {
-                    StackPanel::new().keyed_children([(id, self.text_editor(id, "", 400.0))])
-                }
-                None => View::empty(),
-            },
-        };
-        let width = self.page_width();
-        let page = Border::new()
-            .background(paper().page)
-            .border_brush(paper().border)
-            .border_thickness(Thickness::uniform(1.0))
-            .corner_radius(CornerRadius::uniform(4.0))
-            .padding(Thickness::xy(64.0, 48.0))
-            .width(width)
-            // A portrait page, as in Word: at least as tall as a Letter sheet of this width.
-            .min_height(width * 11.0 / 8.5)
-            .content(content);
-        // The page keeps the light theme in a dark window (see `theme::set_page_theme`); a Grid
-        // carries the reference, which Reactor does not offer on a Border.
-        let page = Grid::new().element_ref(&self.page).children((page,));
-        // Zoom scales the whole page, as in Word: it keeps its layout width and line breaks,
-        // and the Viewbox draws it larger or smaller.
-        let zoomed = Viewbox::new()
-            .stretch(Stretch::Uniform)
-            .width(width * self.zoom)
-            .horizontal_alignment(HorizontalAlignment::Center)
-            .margin(Thickness::xy(24.0, 24.0))
-            .slot(ViewboxSlot::Child, page);
-        // A page zoomed wider than the window scrolls sideways.
-        let wide = width * self.zoom > width + 1.0;
-        let scroller = ScrollViewer::new()
-            .horizontal_scroll_bar_visibility(if wide {
-                ScrollBarVisibility::Auto
-            } else {
-                ScrollBarVisibility::Disabled
-            })
-            .vertical_scroll_bar_visibility(ScrollBarVisibility::Auto)
-            .content(zoomed);
-        Border::new().background(CANVAS).content(scroller)
-    }
-
-    /// A RichEditBox inside a wrapper that carries the borderless theme resources. The box is
-    /// only created once the wrapper is styled, so its template picks the resources up.
-    fn text_editor(&self, id: Id, placeholder: &str, min_height: f64) -> View {
-        let (Some(wrapper), Some(editor)) = (self.wrappers.get(&id), self.editors.get(&id)) else {
-            return View::empty();
-        };
-        let child = if self.styled.contains(&id) {
-            let mut editor = RichEditBox::new()
-                .element_ref(editor)
-                .min_height(min_height);
-            if !placeholder.is_empty() {
-                editor = editor.placeholder_text(placeholder);
-            }
-            View::from(editor)
-        } else {
-            View::empty()
-        };
-        Grid::new()
-            .element_ref(wrapper)
-            .min_height(min_height)
-            .children((child,))
-    }
-
-    fn segment(&self, segment: &Segment, only: bool, context: &mut ViewContext<Self>) -> View {
-        match segment {
-            Segment::Flow { id, .. } => {
-                let placeholder = if only {
-                    "Start writing your page…"
-                } else {
-                    ""
-                };
-                self.text_editor(*id, placeholder, 28.0)
-            }
-            Segment::Code { id, language, .. } => {
-                let is_mermaid = language.trim().eq_ignore_ascii_case("mermaid");
-                let title = if is_mermaid {
-                    "Mermaid diagram"
-                } else {
-                    "Code block"
-                };
-                let header = Grid::new()
-                    .columns([
-                        GridLength::Auto,
-                        GridLength::Pixel(180.0),
-                        GridLength::STAR,
-                        GridLength::Auto,
-                    ])
-                    .column_spacing(8.0)
-                    .children((
-                        caption(title).in_column(0),
-                        TextBox::new()
-                            .text(language.clone())
-                            .placeholder_text("Language (optional)")
-                            .on_text_changed(context.callback({
-                                let id = *id;
-                                move |text| Msg::CodeLanguage(id, text)
-                            }))
-                            .grid_column(1),
-                        if is_mermaid {
-                            caption("Renders as a diagram in SharePoint").in_column(2)
-                        } else {
-                            View::empty()
-                        },
-                        delete_button(context, *id, "Remove code block").in_column(3),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 48.0))),
-                )
-            }
-            Segment::Math { id, .. } => {
-                let header = Grid::new()
-                    .columns([GridLength::STAR, GridLength::Auto])
-                    .children((
-                        caption("Equation (LaTeX) – shown as $$ … $$").in_column(0),
-                        delete_button(context, *id, "Remove equation").in_column(1),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 28.0))),
-                )
-            }
-            Segment::Raw { id, .. } => {
-                let header = Grid::new()
-                    .columns([GridLength::STAR, GridLength::Auto])
-                    .children((
-                        caption("Markdown the visual editor keeps as written").in_column(0),
-                        delete_button(context, *id, "Remove").in_column(1),
-                    ));
-                card(
-                    StackPanel::new()
-                        .spacing(6.0)
-                        .children((header, self.text_editor(*id, "", 28.0))),
-                )
-            }
-            Segment::Table { id, table } => self.table(*id, table, context),
-            Segment::Media { id, media } => self.media(*id, media, context),
-            Segment::Rule { id } => Grid::new()
-                .columns([GridLength::STAR, GridLength::Auto])
-                .column_spacing(8.0)
-                // Tall enough for the remove button (XAML clips what overflows a row), with
-                // negative margins so the divider takes no more room than a blank line.
-                .height(28.0)
-                .margin(Thickness::new(TEXT_INSET.left, -8.0, TEXT_INSET.right, -8.0))
-                .children((
-                    Border::new()
-                        .background(paper().rule)
-                        .height(1.0)
-                        .vertical_alignment(VerticalAlignment::Center)
-                        .grid_column(0),
-                    Button::new()
-                        .style(ButtonStyle::Subtle)
-                        .min_height(0.0)
-                        .height(28.0)
-                        .vertical_alignment(VerticalAlignment::Center)
-                        .on_click(context.message(Msg::Delete(*id)))
-                        .content(
-                            Viewbox::new()
-                                .width(14.0)
-                                .height(14.0)
-                                .slot(ViewboxSlot::Child, symbol(Symbol::Delete)),
-                        )
-                        .tooltip("Remove divider")
-                        .in_column(1),
-                )),
-        }
-    }
-
-    fn table(&self, id: Id, table: &TableState, context: &mut ViewContext<Self>) -> View {
-        let columns = table.columns();
-        let mut cells = Vec::new();
-        for (row, values) in table.cells.iter().enumerate() {
-            for (column, value) in values.iter().enumerate() {
-                let cell = TextBox::new()
-                    .text(value.clone())
-                    .placeholder_text(if row == 0 { "Header" } else { "" })
-                    .text_wrapping(TextWrapping::Wrap)
-                    .background(if row == 0 { paper().card } else { paper().page })
-                    .on_text_changed(context.callback(move |text| Msg::Cell(id, row, column, text)))
-                    .grid_row(row as i32)
-                    .grid_column(column as i32);
-                cells.push(((row * 1000 + column) as u64, cell));
-            }
-        }
-        let grid = Grid::new()
-            .rows(vec![GridLength::Auto; table.cells.len()])
-            .columns(vec![GridLength::STAR; columns.max(1)])
-            .row_spacing(2.0)
-            .column_spacing(2.0)
-            .keyed_children(cells);
-        let actions = StackPanel::new()
-            .orientation(Orientation::Horizontal)
-            .spacing(4.0)
-            .children((
-                text_button(context, "+ Row", Msg::Table(id, TableEdit::AddRow)),
-                text_button(context, "+ Column", Msg::Table(id, TableEdit::AddColumn)),
-                text_button(context, "− Row", Msg::Table(id, TableEdit::RemoveRow)),
-                text_button(context, "− Column", Msg::Table(id, TableEdit::RemoveColumn)),
-                delete_button(context, id, "Remove table"),
-            ));
-        StackPanel::new()
-            .spacing(4.0)
-            .margin(TEXT_INSET.with_vertical(6.0))
-            .children((grid, actions))
-    }
-
-    fn media(&self, id: Id, media: &Media, context: &mut ViewContext<Self>) -> View {
-        let source = media.source().to_string();
-        let preview = if media.is_video() {
-            StackPanel::new()
-                .orientation(Orientation::Horizontal)
-                .spacing(8.0)
-                .children((
-                    symbol(Symbol::Video),
-                    caption("Video – plays in SharePoint"),
-                ))
-        } else if source.starts_with("http://") || source.starts_with("https://") {
-            match Image::new().source(source.clone()) {
-                Ok(image) => image
-                    .stretch(Stretch::Uniform)
-                    .max_height(320.0)
-                    .horizontal_alignment(HorizontalAlignment::Left)
-                    .into(),
-                Err(_) => caption("The picture address is not valid."),
-            }
-        } else {
-            caption(
-                "Use a web address readers can reach – SharePoint does not copy local pictures.",
-            )
-        };
-        let header = Grid::new()
-            .columns([GridLength::STAR, GridLength::Auto])
-            .children((
-                caption(if media.is_video() { "Video" } else { "Picture" }).in_column(0),
-                delete_button(context, id, "Remove").in_column(1),
-            ));
-        card(
-            StackPanel::new().spacing(6.0).children((
-                header,
-                preview,
-                TextBox::new()
-                    .text(source)
-                    .placeholder_text("https://…")
-                    .on_text_changed(context.callback(move |text| Msg::MediaSource(id, text)))
-                    .slot(TextBoxSlot::Header, "Address"),
-                TextBox::new()
-                    .text(media.alt_text().to_string())
-                    .placeholder_text("Describe it for people who can't see it")
-                    .on_text_changed(context.callback(move |text| Msg::MediaAlt(id, text)))
-                    .slot(TextBoxSlot::Header, "Alt text"),
-            )),
-        )
+    /// The page: the editor in a WebView2 (see `page`), on the canvas around it. The page
+    /// lays itself out, zoomed, and scrolls itself; its background is clear, so the canvas
+    /// shows around it.
+    fn page(&self) -> View {
+        Border::new()
+            .background(CANVAS)
+            .content(WebView2::new().element_ref(&self.web))
     }
 
     fn properties_pane(&self, context: &mut ViewContext<Self>) -> View {
@@ -707,10 +383,23 @@ impl Editor {
             .padding(Thickness::uniform(16.0))
             .content(
                 StackPanel::new().spacing(10.0).children((
-                    TextBlock::new()
-                        .text("Page properties")
-                        .font_size(18.0)
-                        .font_weight(FontWeight::SEMI_BOLD),
+                    // As the Document Editor's header: the title, and a close button.
+                    Grid::new()
+                        .columns([GridLength::STAR, GridLength::Auto])
+                        .children((
+                            TextBlock::new()
+                                .text("Page properties")
+                                .font_size(18.0)
+                                .font_weight(FontWeight::SEMI_BOLD)
+                                .vertical_alignment(VerticalAlignment::Center)
+                                .grid_column(0),
+                            Button::new()
+                                .style(ButtonStyle::Subtle)
+                                .on_click(context.message(Msg::Command(Command::ToggleProperties)))
+                                .content(symbol(Symbol::Cancel))
+                                .tooltip("Close page properties")
+                                .in_column(1),
+                        )),
                     caption("Saved as YAML front matter at the top of the file."),
                     body,
                     add,
@@ -733,7 +422,27 @@ impl Editor {
                 .on_text_changed(context.callback(move |text| Msg::DialogField(index, text)))
                 .slot(TextBoxSlot::Header, header)
         };
+        let folder = self
+            .path
+            .as_ref()
+            .and_then(|path| path.parent())
+            .map(|folder| folder.display().to_string())
+            .unwrap_or_default();
         let (title, primary, content): (&str, &str, View) = match &dialog.kind {
+            DialogKind::Rename => (
+                "Rename file",
+                "Rename",
+                StackPanel::new().spacing(12.0).width(420.0).children((
+                    field(context, 0, "File name", "New name"),
+                    TextBlock::new()
+                        .text(format!(
+                            "The file stays in {folder}. Without an extension, it keeps its own."
+                        ))
+                        .foreground(MUTED)
+                        .font_size(12.0)
+                        .text_wrapping(TextWrapping::Wrap),
+                )),
+            ),
             DialogKind::Link => (
                 "Insert link",
                 "Insert",
@@ -760,13 +469,17 @@ impl Editor {
                     field(context, 1, "Text to display (optional)", ""),
                 )),
             ),
-            DialogKind::Image | DialogKind::Video => (
-                if dialog.kind == DialogKind::Image {
-                    "Insert picture"
-                } else {
-                    "Insert video"
+            DialogKind::Image | DialogKind::Video | DialogKind::EditMedia(_) => (
+                match dialog.kind {
+                    DialogKind::Image => "Insert picture",
+                    DialogKind::Video => "Insert video",
+                    _ => "Picture or video",
                 },
-                "Insert",
+                if matches!(dialog.kind, DialogKind::EditMedia(_)) {
+                    "Save"
+                } else {
+                    "Insert"
+                },
                 StackPanel::new().spacing(12.0).width(420.0).children((
                     field(context, 0, "Address", "https://contoso.sharepoint.com/…"),
                     field(
@@ -787,39 +500,12 @@ impl Editor {
                     .text("This page has changes that are not saved.")
                     .into(),
             ),
-            DialogKind::About => (
-                APP_NAME,
-                "",
-                StackPanel::new().spacing(12.0).width(420.0).children((
-                    TextBlock::new()
-                        .text(format!("Version {APP_VERSION}"))
-                        .foreground(MUTED)
-                        ,
-                    TextBlock::new()
-                        .text(
-                            "A native Windows editor for SharePoint Knowledge Base articles. \
-                             It works like Word, has a Markdown source view, and saves the \
-                             Markdown files a knowledge base imports.",
-                        )
-                        .text_wrapping(TextWrapping::Wrap)
-                        ,
-                    HyperlinkButton::new()
-                        // A fixed, valid address, so this cannot fail.
-                        .navigate_uri(PROJECT_URL)
-                        .unwrap_or_default()
-                        // Line the link's text up with the text above.
-                        .margin(Thickness::new(-11.0, 0.0, 0.0, 0.0))
-                        .content("View the project on GitHub"),
-                )),
-            ),
         };
-        let about = dialog.kind == DialogKind::About;
         let mut view = ContentDialog::new()
             .is_open(true)
             .title(title)
-            // The About box has only a close button.
             .primary_button_text(primary)
-            .close_button_text(if about { "OK" } else { "Cancel" })
+            .close_button_text("Cancel")
             .on_closed(context.callback(Msg::DialogClosed));
         if matches!(dialog.kind, DialogKind::Discard(_)) {
             view = view.secondary_button_text("Don't save");
@@ -1148,32 +834,6 @@ fn band_resources(foreground: Option<Color>, hover: bool) -> ResourceOverrides {
         .set("ButtonForegroundPressed", text)
 }
 
-fn text_button(context: &mut ViewContext<Editor>, text: &str, message: Msg) -> View {
-    Button::new()
-        .style(ButtonStyle::Subtle)
-        .on_click(context.message(message))
-        .content(text.to_string())
-}
-
-fn delete_button(context: &mut ViewContext<Editor>, id: Id, tip: &str) -> View {
-    Button::new()
-        .style(ButtonStyle::Subtle)
-        .on_click(context.message(Msg::Delete(id)))
-        .content(symbol(Symbol::Delete))
-        .tooltip(tip)
-}
-
-fn card(content: View) -> View {
-    Border::new()
-        .background(paper().card)
-        .border_brush(paper().card_border)
-        .border_thickness(Thickness::uniform(1.0))
-        .corner_radius(CornerRadius::uniform(6.0))
-        .padding(Thickness::uniform(10.0))
-        .margin(TEXT_INSET.with_vertical(6.0))
-        .content(content)
-}
-
 /// Grid placement for finished views, which Reactor only offers on concrete controls.
 trait Place {
     fn in_column(self, column: i32) -> View;
@@ -1203,29 +863,6 @@ fn path_icon(data: &str, size: f64) -> View {
         .width(size)
         .height(size)
         .slot(ViewboxSlot::Child, icon)
-}
-
-impl Editor {
-    /// The page is sized from the window rather than stretched: an empty RichEditBox reports a
-    /// width that makes a stretched, width-capped page sit off-center.
-    fn page_width(&self) -> f64 {
-        const MAX: f64 = 900.0;
-        const MIN: f64 = 320.0;
-        // Page margins (2 × 24) plus room for the vertical scroll bar.
-        let chrome = 48.0
-            + 20.0
-            + if self.show_properties {
-                PROPERTIES_WIDTH
-            } else {
-                0.0
-            }
-            + if self.show_navigation {
-                self.explorer_width()
-            } else {
-                0.0
-            };
-        (self.window_width - chrome).clamp(MIN, MAX)
-    }
 }
 
 impl Editor {
@@ -1507,7 +1144,7 @@ impl Editor {
             .tooltip("Go to this word");
         let chosen = self
             .spelling_choice
-            .get(&(issue.editor, issue.start))
+            .get(&issue.start)
             .copied()
             .unwrap_or(0);
         let suggestions: View = if issue.suggestions.is_empty() {
@@ -1592,14 +1229,15 @@ impl Editor {
     }
 
     fn headings_tab(&self, context: &mut ViewContext<Self>) -> View {
-        if self.mode == Mode::Source {
+        let entries = self.outline();
+        if entries.is_empty() && self.mode == Mode::Source {
             return notice(
                 context,
-                "Switch to the Visual view to navigate by headings.",
+                "This page doesn't have any headings. To add one, start a line with # \
+                 (## for Heading 2, and so on).",
                 None,
             );
         }
-        let entries = self.outline();
         if entries.is_empty() {
             return notice(
                 context,
@@ -1617,7 +1255,13 @@ impl Editor {
                         .map(|(index, entry)| {
                             (
                                 themed_key(index),
-                                outline_row(context, entry, self.collapsed.contains(&entry.key)),
+                                outline_row(
+                                    context,
+                                    entry,
+                                    self.collapsed.contains(&entry.key),
+                                    self.options.heading_styles,
+                                    self.explorer_width(),
+                                ),
                             )
                         })
                         .collect::<Vec<_>>(),
@@ -1754,7 +1398,13 @@ impl Editor {
 
 /// One heading in the Navigation pane: an expand/collapse chevron when it has subheadings, and
 /// the heading text, indented by level.
-fn outline_row(context: &mut ViewContext<Editor>, entry: &OutlineEntry, collapsed: bool) -> View {
+fn outline_row(
+    context: &mut ViewContext<Editor>,
+    entry: &OutlineEntry,
+    collapsed: bool,
+    show_style: bool,
+    pane_width: f64,
+) -> View {
     const INDENT: f64 = 14.0;
     let indent = f64::from(entry.heading.level.saturating_sub(1)) * INDENT;
     let chevron: View = if entry.has_children {
@@ -1789,8 +1439,25 @@ fn outline_row(context: &mut ViewContext<Editor>, entry: &OutlineEntry, collapse
     } else {
         label
     };
+    // Settings › Options: the heading's style after its name, such as (H2), in grey. The name
+    // is capped so the style stays in view right after it when the name is cut short.
+    let label: View = if show_style {
+        let style = format!("({})", heading_abbreviation(entry.heading.level));
+        // The pane's padding, the indent and chevron columns, and the button's own padding.
+        let room = pane_width - 2.0 * PANE_PADDING - indent - 24.0 - 24.0;
+        let name_room = (room - text_width(&style, 14.0) - 6.0).max(24.0);
+        StackPanel::new()
+            .orientation(Orientation::Horizontal)
+            .spacing(6.0)
+            .children((
+                label.max_width(name_room),
+                TextBlock::new().text(style).foreground(MUTED).max_lines(1),
+            ))
+    } else {
+        label.into()
+    };
     let button = Button::new()
-        .on_click(context.message(Msg::Navigate(entry.editor, entry.heading.position)))
+        .on_click(context.message(Msg::Navigate(entry.heading.position)))
         .horizontal_alignment(HorizontalAlignment::Stretch)
         .horizontal_content_alignment(HorizontalAlignment::Left);
     let button = if entry.current {
@@ -1937,6 +1604,11 @@ mod pane_tests {
         assert_eq!(tabs_that_fit(&labels, 260.0), 3);
         assert_eq!(tabs_that_fit(&labels, 120.0), 0);
     }
+}
+
+/// A heading style's short name for the Navigation pane: Heading 2 is "H2".
+fn heading_abbreviation(level: u8) -> String {
+    format!("H{level}")
 }
 
 /// A title band tab's name, at the button's default (WinUI) size, with an accent underline

@@ -12,7 +12,9 @@ $icons = [ordered]@{
   PICTURE='image'; VIDEO='video'; CODE_BLOCK='code_block'; DIVIDER='line_horizontal_1';
   QUOTE='text_quote'; VISUAL='eye'; SOURCE='code'; NAVIGATION='navigation'; FIND='search';
   REPLACE='text_grammar_arrow_right'; PROPERTIES='tag'; ZOOM_IN='zoom_in'; ZOOM_OUT='zoom_out';
-  MORE='more_horizontal'
+  MORE='more_horizontal'; INFO='info'; HELP='question_circle';
+  SETTINGS='settings'; OPTIONS='options'; NEW_PAGE='document_add'; OPEN='folder_open';
+  SAVE='save'; SAVE_AS='save_edit'; RENAME='rename'
 }
 $args_per = @{ M=2; L=2; H=1; V=1; C=6; S=4; Q=4; T=2; A=7; Z=0 }
 

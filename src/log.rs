@@ -16,8 +16,16 @@ pub fn write(line: std::fmt::Arguments) {
         .append(true)
         .open(path)
     {
-        _ = writeln!(file, "{line}");
+        // Milliseconds since the first entry, to see how long things take.
+        static START: OnceLock<std::time::Instant> = OnceLock::new();
+        let elapsed = START.get_or_init(std::time::Instant::now).elapsed().as_millis();
+        _ = writeln!(file, "{elapsed:>7} {line}");
     }
+}
+
+/// Whether timing is being recorded (`KB_EDITOR_LOG` is set).
+pub fn enabled() -> bool {
+    path().is_some()
 }
 
 macro_rules! log {

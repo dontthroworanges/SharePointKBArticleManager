@@ -169,18 +169,6 @@ pub fn window_handle(element: &windows_core::IUnknown) -> Result<isize> {
     Ok(id.value as isize)
 }
 
-/// Gives the page its own theme, whatever the window's: light, white like paper, unless View ›
-/// Switch Background has darkened it.
-pub fn set_page_theme(element: &windows_core::IUnknown, dark: bool) -> Result<()> {
-    element
-        .cast::<native::IFrameworkElement>()?
-        .SetRequestedTheme(if dark {
-            native::ElementTheme::Dark
-        } else {
-            native::ElementTheme::Light
-        })
-}
-
 /// Whether dark text reads better than white on `color` (the YIQ brightness test).
 fn is_light(color: Color) -> bool {
     let brightness = u32::from(color.r) * 299 + u32::from(color.g) * 587 + u32::from(color.b) * 114;
