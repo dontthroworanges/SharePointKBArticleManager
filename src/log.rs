@@ -16,8 +16,22 @@ pub fn write(line: std::fmt::Arguments) {
         .append(true)
         .open(path)
     {
-        _ = writeln!(file, "{line}");
+        // Milliseconds since the first entry, to see how long things take.
+        static START: OnceLock<std::time::Instant> = OnceLock::new();
+        let elapsed = START.get_or_init(std::time::Instant::now).elapsed().as_millis();
+        _ = writeln!(file, "{elapsed:>7} {line}");
     }
+}
+
+/// Whether a diagnostic switch is on: the environment variable `name` is set to anything but
+/// `0`. Used to turn suspects off one at a time while measuring typing speed.
+pub fn switch(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| value != "0")
+}
+
+/// Whether timing is being recorded (`KB_EDITOR_LOG` is set).
+pub fn enabled() -> bool {
+    path().is_some()
 }
 
 macro_rules! log {

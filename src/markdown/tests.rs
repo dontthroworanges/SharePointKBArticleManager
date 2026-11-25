@@ -236,3 +236,17 @@ graph TD
 ";
     assert_round_trip(markdown);
 }
+
+#[test]
+fn source_headings_for_the_markdown_view() {
+    let source = "---\ntitle: Page\n---\n\n# Intro *here*\n\nText\n\n```\n# not a heading\n```\n\nSetext `code`\n------\n\n### Third\n";
+    let found = super::headings(source);
+    let summary: Vec<(u8, &str, usize)> = found
+        .iter()
+        .map(|heading| (heading.level, heading.text.as_str(), heading.line))
+        .collect();
+    assert_eq!(
+        summary,
+        [(1, "Intro here", 4), (2, "Setext code", 12), (3, "Third", 15)]
+    );
+}

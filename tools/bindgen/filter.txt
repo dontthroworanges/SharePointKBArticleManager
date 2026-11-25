@@ -6,7 +6,30 @@ Microsoft.UI.Xaml.Controls.TextControlPasteEventHandler
 Microsoft.UI.Xaml.Controls.TextControlPasteEventArgs
 Microsoft.UI.Xaml.RoutedEventHandler
 Windows.UI.Color
-Microsoft.UI.Xaml.IUIElement::{PreviewKeyDown, StartBringIntoView, StartBringIntoViewWithOptions, ContextFlyout, XamlRoot}
+Microsoft.UI.Xaml.IUIElement::{PreviewKeyDown, PointerWheelChanged, BringIntoViewRequested, TransformToVisual, StartBringIntoView, StartBringIntoViewWithOptions, ContextFlyout, XamlRoot}
+Microsoft.UI.Xaml.Input.PointerEventHandler
+Microsoft.UI.Xaml.Input.PointerRoutedEventArgs::{}
+Microsoft.UI.Xaml.Input.IPointerRoutedEventArgs::{GetCurrentPoint, Handled}
+Microsoft.UI.Input.PointerPoint::{}
+Microsoft.UI.Input.IPointerPoint::{Properties}
+Microsoft.UI.Xaml.Controls.ToolTip::{}
+Microsoft.UI.Xaml.Controls.IToolTip::{IsOpen}
+Microsoft.UI.Xaml.Controls.ToolTipService::{}
+Microsoft.UI.Xaml.Controls.IToolTipServiceStatics::{SetToolTip}
+Microsoft.UI.Xaml.DependencyObject::{}
+Microsoft.UI.Xaml.Media.GeneralTransform::{}
+Microsoft.UI.Xaml.Media.IGeneralTransform::{TransformPoint}
+Microsoft.UI.Xaml.IXamlRoot::{Content, RasterizationScale}
+Microsoft.UI.Input.PointerPointProperties::{}
+Microsoft.UI.Input.IPointerPointProperties::{MouseWheelDelta}
+Windows.Foundation.TypedEventHandler
+Microsoft.UI.Xaml.XamlRootChangedEventArgs::{}
+Windows.UI.ViewManagement.UISettingsMessageDurationChangedEventArgs::{}
+Windows.UI.ViewManagement.UISettingsAutoHideScrollBarsChangedEventArgs::{}
+Windows.UI.ViewManagement.UISettingsAnimationsEnabledChangedEventArgs::{}
+Microsoft.UI.Dispatching.DispatcherQueueShutdownStartingEventArgs::{}
+Microsoft.UI.Xaml.BringIntoViewRequestedEventArgs::{}
+Microsoft.UI.Xaml.IBringIntoViewRequestedEventArgs::{VerticalAlignmentRatio, Handled, TargetElement, TargetRect}
 Microsoft.UI.Xaml.Input.KeyEventHandler
 Microsoft.UI.Xaml.Input.KeyRoutedEventArgs::{}
 Microsoft.UI.Xaml.Input.IKeyRoutedEventArgs::{Key, Handled}
@@ -38,7 +61,9 @@ Windows.Foundation.Point
 Microsoft.UI.Xaml.Controls.AppBarSeparator::{}
 Microsoft.UI.Xaml.XamlRoot::{}
 Microsoft.UI.Xaml.IXamlRoot2::{ContentIslandEnvironment}
-Microsoft.UI.Xaml.IFrameworkElement::{RequestedTheme}
+Microsoft.UI.Xaml.IFrameworkElement::{RequestedTheme, SizeChanged, ActualHeight}
+Microsoft.UI.Xaml.SizeChangedEventHandler
+Microsoft.UI.Xaml.SizeChangedEventArgs::{}
 Microsoft.UI.Xaml.ElementTheme
 Microsoft.UI.Content.ContentIslandEnvironment::{}
 Microsoft.UI.Content.IContentIslandEnvironment::{AppWindowId}
@@ -82,3 +107,5 @@ Microsoft.UI.Dispatching.IDispatcherQueue::{TryEnqueueWithPriority}
 Microsoft.UI.Dispatching.DispatcherQueueHandler
 Microsoft.UI.Dispatching.DispatcherQueuePriority
 Microsoft.UI.Xaml.Controls.ITextBlock::{FontSize, FontWeight}
+Microsoft.UI.Xaml.Controls.IScrollViewerStatics::{SetVerticalScrollBarVisibility}
+Microsoft.UI.Xaml.Controls.ScrollBarVisibility

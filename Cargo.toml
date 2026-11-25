@@ -17,6 +17,7 @@ windows-reference = "0.100"
 
 [build-dependencies]
 windows-reactor-setup = "0.100.0"
+winresource = "0.1"
 
 [workspace]
 members = [".", "tools/bindgen"]

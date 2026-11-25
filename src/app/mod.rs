@@ -42,9 +42,13 @@ pub const RIBBON_LAYOUTS: [(&str, RibbonLayout); 2] = [
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
+    /// New, open and save, as a ribbon tab.
+    File,
     Home,
     Insert,
     View,
+    /// Help: the About box and links to help pages.
+    Help,
 }
 
 /// Keyboard shortcuts handled by the app rather than the RichEditBox.
@@ -105,8 +109,12 @@ pub enum Command {
     Open,
     Save,
     SaveAs,
-    /// File › About: the version, what the app is, and where it lives.
+    /// File › Rename: rename the open file where it is.
+    Rename,
+    /// Help › About: Settings › About (the version, what the app is, where it lives).
     About,
+    /// Open a web page in the default browser.
+    OpenUrl(&'static str),
     Undo,
     Redo,
     Inline(InlineCommand),
@@ -258,7 +266,8 @@ pub enum DialogKind {
     Image,
     Video,
     Discard(Pending),
-    About,
+    /// File › Rename: the new file name.
+    Rename,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -284,12 +293,16 @@ pub enum Msg {
     Changed(Id),
     /// A formatting edit made with a keyboard shortcut, which does not change the text.
     Edited(Id),
+    /// A text flow's editor was laid out at a new size.
+    Resized(Id),
+    /// Typing has paused (see `host::after_typing`): time for the whole-document work
+    /// deferred while keys were coming in.
+    Idle,
     Pasted(Id),
     Shortcut(Id, Shortcut),
     /// A window-wide shortcut, from wherever focus is.
     AppShortcut(Shortcut),
     Command(Command),
-    FileMenu(String),
     /// A click in the ribbon's "More" menu, by label.
     MoreMenu(String),
     StyleChosen(Option<usize>),
@@ -323,8 +336,10 @@ pub enum Msg {
     ThemeChosen(Option<usize>),
     /// The status bar zoom slider moved (its position, 0 to 100).
     ZoomSlider(f64),
-    /// A preset picked in the View tab's zoom box.
+    /// A preset picked in the View tab's zoom box (after the percentages, Page Width).
     ZoomPreset(Option<usize>),
+    /// The mouse wheel turned over the page with Ctrl held (120 a notch; up is positive).
+    WheelZoom(i32),
     /// Jump to a heading: the editor and the position in it.
     Navigate(Id, i32),
     /// A command chosen in an editor's right-click menu: a style, or a Font or Paragraph
@@ -356,23 +371,93 @@ pub enum Msg {
     /// Scroll an editor position into view, at this fraction of the window height from the top.
     ScrollTo(Id, i32, f64),
     ToggleOutline(OutlineKey),
+    /// The gear at the right of the tabs: show the Settings page over the window.
+    OpenSettings,
+    /// The title bar's back button: leave Settings for the page again.
+    CloseSettings,
+    /// A category picked down the left of Settings, by tag.
+    SettingsCategory(Option<String>),
+    /// Settings › Options › Show heading styles in Navigation.
+    HeadingStyles(bool),
+    /// Settings › Options › Always show the Document Editor.
+    DocumentEditor(bool),
+    /// Settings › Options › Space below the cursor, by index in `CURSOR_SPACES`.
+    CursorSpace(Option<usize>),
+    /// Settings › Options › Paragraph font size, by index in `PARAGRAPH_SIZES`.
+    ParagraphSize(Option<usize>),
 }
 
-/// The File menu: label and command. Menu clicks are reported by label.
-pub const FILE_MENU: [(&str, Command); 5] = [
-    ("New page", Command::New),
-    ("Open…", Command::Open),
-    ("Save", Command::Save),
-    ("Save as…", Command::SaveAs),
-    ("About", Command::About),
-];
-
-/// The app's name, in the title bar and the About box.
+/// The app's name, in the title bar and Settings › About.
 pub const APP_NAME: &str = "SharePoint Article Manager";
 /// The version, from Cargo.toml.
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Where the project lives, linked from the About box.
+/// The app's icon: Fluent UI's color "Book Database" (MIT), rendered from assets/app-icon.svg.
+/// The 16px design for the title bar, at up to 300% scale.
+pub const APP_ICON_SMALL: &[u8] = include_bytes!("../../assets/app-icon-16.png");
+/// The 32px design, large, for Settings › About.
+pub const APP_ICON_LARGE: &[u8] = include_bytes!("../../assets/app-icon-32.png");
+/// The same icon as build.rs embeds in the exe for Explorer.
+const APP_ICON_ICO: &[u8] = include_bytes!("../../assets/app.ico");
+
+/// The window's icon file, for the taskbar and Alt+Tab. WinUI's AppWindow takes only a path to
+/// an .ico, so the copy built into the exe is written beside the settings (when it differs).
+pub fn window_icon_path() -> Option<&'static str> {
+    static PATH: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    PATH.get_or_init(|| {
+        let folder = PathBuf::from(std::env::var_os("APPDATA")?).join(APP_NAME);
+        let path = folder.join("app.ico");
+        if std::fs::read(&path).ok().as_deref() != Some(APP_ICON_ICO) {
+            std::fs::create_dir_all(&folder).ok()?;
+            std::fs::write(&path, APP_ICON_ICO).ok()?;
+        }
+        path.into_os_string().into_string().ok()
+    })
+    .as_deref()
+}
+/// Where the project lives, linked from Settings › About.
 pub const PROJECT_URL: &str = "https://github.com/dontthroworanges/SharePointKBArticleManager";
+/// The categories down the left of Settings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingsCategory {
+    Options,
+    About,
+}
+
+/// Settings' categories: tag, name and category.
+pub const SETTINGS_CATEGORIES: [(&str, &str, SettingsCategory); 2] = [
+    ("options", "Options", SettingsCategory::Options),
+    ("about", "About", SettingsCategory::About),
+];
+
+/// The choices made in Settings.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Options {
+    /// Show each heading's style, such as (H2), after its name in the Navigation pane.
+    pub heading_styles: bool,
+    /// Open the Document Editor pane at every start.
+    pub document_editor: bool,
+    /// Blank page kept below the caret while typing, in percent of the window's height.
+    pub cursor_space: u8,
+    /// Normal text's size in the visual editor, in points.
+    pub paragraph_size: f32,
+}
+
+/// The choices for Settings › Options › Paragraph font size: label and size in points. Shown in
+/// pixels only, as web pages measure text (a pixel is 3/4 of a point).
+pub const PARAGRAPH_SIZES: [(&str, f32); 3] = [("14 px", 10.5), ("16 px", 12.0), ("18 px", 13.5)];
+
+/// The choices for Settings › Options › Space below the cursor: label and percent of the window.
+pub const CURSOR_SPACES: [(&str, u8); 4] = [
+    ("None", 0),
+    ("A quarter of the window", 25),
+    ("A third of the window", 33),
+    ("Half the window", 50),
+];
+pub const DEFAULT_CURSOR_SPACE: u8 = 33;
+
+/// Microsoft's guide to creating and editing knowledge base articles, linked from Help.
+pub const KB_HELP_URL: &str =
+    "https://support.microsoft.com/en-us/sharepoint/knowledge-base/create-edit-knowledge-base-manually";
 
 /// The paragraph styles offered in the Styles box, in the order and with the names of the
 /// SharePoint web editor's.
@@ -398,6 +483,9 @@ pub struct Editor {
     wrappers: HashMap<Id, ElementRef<Grid>>,
     styled: HashSet<Id>,
     in_flight: HashSet<Id>,
+    /// Editors typed in since the last `Msg::Idle`, whose heading rules, headings, search
+    /// results and spelling are brought up to date once typing pauses.
+    typed_in: HashSet<Id>,
     /// Content for text editors that are not attached yet.
     pending_content: HashMap<Id, Content>,
     generation: u64,
@@ -406,6 +494,11 @@ pub struct Editor {
     selection: SelectionState,
     mode: Mode,
     source_id: Option<Id>,
+    /// The Markdown the source editor was last given from the visual page: back in the visual
+    /// view, the page is rebuilt only if the Markdown no longer matches it.
+    source_snapshot: Option<String>,
+    /// The visual editor that had the caret when the Markdown view opened.
+    visual_active: Option<Id>,
     tab: Tab,
     dirty: bool,
     show_properties: bool,
@@ -414,6 +507,11 @@ pub struct Editor {
     window: WindowRef,
     close_guard: Rc<CloseGuard>,
     window_width: f64,
+    window_height: f64,
+    /// The choices made in Settings.
+    pub(super) options: Options,
+    /// The Settings page, when it is showing over the window, and its category.
+    pub(super) settings: Option<SettingsCategory>,
     show_navigation: bool,
     /// The Document Editor's width, set by dragging its right edge.
     navigation_width: f64,
@@ -423,6 +521,10 @@ pub struct Editor {
     pub(super) splitter: ElementRef<Grid>,
     /// Headings of each attached text flow, for the Navigation pane.
     headings: HashMap<Id, Vec<rich::HeadingInfo>>,
+    /// Each editor's length when its `headings` were last put right (see `follow_edit`).
+    heading_lengths: HashMap<Id, i32>,
+    /// Where each text flow's Heading 1 and 2 rules go (see `rich::heading_rules`).
+    rules: HashMap<Id, Vec<f32>>,
     /// Headings collapsed in the Navigation pane.
     collapsed: HashSet<OutlineKey>,
     /// The caret: which editor and where, for highlighting the current heading.
@@ -453,6 +555,26 @@ pub struct Editor {
     pub(super) overflow_commands: std::cell::RefCell<Vec<(String, Command)>>,
     /// Page zoom, 1.0 for 100%.
     zoom: f64,
+    /// View › Zoom › Page Width: the page's width follows the window's, with no upper limit
+    /// (the zoom stays at 100%).
+    page_fit: bool,
+    /// Wheel movement with Ctrl held not yet turned into a zoom step (a touchpad sends a notch
+    /// in pieces).
+    wheel_zoom: i32,
+    /// The page Grid that has the page handlers (its address), and the handlers (see
+    /// `host::hook_page`).
+    page_hooks: Rc<std::cell::RefCell<Option<(usize, Vec<windows_core::EventRevoker>)>>>,
+    /// A Navigation pane heading was chosen and no key pressed since: focusing the editor
+    /// must not scroll the heading away from the top (see `host::hook_page`).
+    navigating: Rc<std::cell::Cell<bool>>,
+    /// The text flows' hosts, for showing links' addresses on hover (see `host::hook_pointer`).
+    flow_hosts: Rc<std::cell::RefCell<Vec<std::rc::Weak<Host>>>>,
+    /// Whether the visual page is showing (not the Markdown view or Settings), for the same.
+    visual_page: Rc<std::cell::Cell<bool>>,
+    /// Blank page added at the end once a heading has been chosen in the Navigation pane, so
+    /// even the last heading can scroll to the top of the window. Kept until another page
+    /// loads, so the page does not shrink under the reader.
+    reach_room: bool,
     /// The theme picked in View › Theme.
     theme: theme::ThemeChoice,
     /// Single-line or Classic ribbon.
@@ -492,12 +614,19 @@ pub enum Zoom {
     Out,
     /// A percentage.
     To(u16),
+    /// Word's Page Width: the page as wide as the window leaves room for, at 100%.
+    PageWidth,
 }
+
+/// The wheel movement of one notch of a mouse wheel; a touchpad sends smaller amounts.
+const WHEEL_NOTCH: i32 = 120;
 
 pub const MIN_ZOOM: f64 = 0.1;
 pub const MAX_ZOOM: f64 = 5.0;
 /// The presets in the View tab's zoom box, as percentages.
 pub const ZOOM_PRESETS: [u16; 8] = [50, 75, 100, 125, 150, 200, 300, 500];
+/// The zoom box's last choice, after the presets: see [`Zoom::PageWidth`].
+pub const PAGE_WIDTH: &str = "Page Width";
 
 /// The tabs of the Document Editor pane, as in Word's Navigation pane.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -562,6 +691,11 @@ impl Component for Editor {
     fn create(path: &Option<PathBuf>, context: &ComponentContext<Self>) -> Self {
         let saved = settings::Settings::load();
         rich::set_dark_page(saved.dark_page);
+        let paragraph_size = saved
+            .paragraph_size
+            .filter(|size| PARAGRAPH_SIZES.iter().any(|&(_, s)| s == *size))
+            .unwrap_or(rich::DEFAULT_BODY_SIZE);
+        rich::set_body_size(paragraph_size);
         let close_guard = Rc::new(CloseGuard {
             settings: std::cell::RefCell::new(saved.clone()),
             ..CloseGuard::default()
@@ -592,6 +726,7 @@ impl Component for Editor {
             wrappers: HashMap::new(),
             styled: HashSet::new(),
             in_flight: HashSet::new(),
+            typed_in: HashSet::new(),
             pending_content: HashMap::new(),
             generation: 0,
             next_id: 1,
@@ -599,6 +734,8 @@ impl Component for Editor {
             selection: SelectionState::default(),
             mode: Mode::Visual,
             source_id: None,
+            source_snapshot: None,
+            visual_active: None,
             tab: Tab::Home,
             dirty: false,
             show_properties: false,
@@ -607,11 +744,25 @@ impl Component for Editor {
             window: context.window(),
             close_guard,
             window_width: 1280.0,
-            show_navigation: false,
+            window_height: 860.0,
+            options: Options {
+                heading_styles: saved.heading_styles,
+                document_editor: saved.document_editor,
+                cursor_space: saved
+                    .cursor_space
+                    .filter(|space| CURSOR_SPACES.iter().any(|&(_, s)| s == *space))
+                    .unwrap_or(DEFAULT_CURSOR_SPACE),
+                paragraph_size,
+            },
+            settings: None,
+            // Settings › Options › Always show the Document Editor.
+            show_navigation: saved.document_editor,
             navigation_width: saved.explorer_width.unwrap_or(340.0),
             resizing: None,
             splitter: ElementRef::new(),
             headings: HashMap::new(),
+            heading_lengths: HashMap::new(),
+            rules: HashMap::new(),
             collapsed: HashSet::new(),
             caret: None,
             explorer_tab: ExplorerTab::Headings,
@@ -632,6 +783,11 @@ impl Component for Editor {
             root_hooked: false,
             overflow_commands: Default::default(),
             zoom: 1.0,
+            page_fit: false,
+            wheel_zoom: 0,
+            page_hooks: Rc::default(),
+            navigating: Rc::default(),
+            reach_room: false,
             theme: theme::THEMES
                 .iter()
                 .find(|(name, _)| saved.theme.as_deref() == Some(*name))
@@ -648,16 +804,47 @@ impl Component for Editor {
             accent: theme::system_accent(),
             page: ElementRef::new(),
             captions: Rc::default(),
+            flow_hosts: Rc::default(),
+            visual_page: Rc::default(),
         };
         match path {
             Some(path) => editor.open_path(path.clone()),
             None => editor.load(Document::default()),
         }
+        // A link's address on hover, and the hand pointer (see `host::watch_pointer`).
+        let guard = Rc::clone(&editor.close_guard);
+        host::watch_pointer(
+            Box::new(move || guard.window.get()),
+            Rc::clone(&editor.flow_hosts),
+            Rc::clone(&editor.visual_page),
+        );
         editor
     }
 
     fn update(&mut self, message: Msg, context: &ComponentContext<Self>) {
         crate::log::log!("{message:?} active={:?}", self.active);
+        let started = std::time::Instant::now();
+        self.update_inner(message, context);
+        crate::log::log!(
+            "  update took {:.2} ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+
+    fn view(&self, _: &Option<PathBuf>, context: &mut ViewContext<Self>) -> View {
+        let started = std::time::Instant::now();
+        let view = self.render(context);
+        crate::log::log!(
+            "  view took {:.2} ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+        view
+    }
+}
+
+impl Editor {
+    fn update_inner(&mut self, message: Msg, context: &ComponentContext<Self>) {
+        let typed = matches!(message, Msg::Changed(_));
         self.color_caption_buttons();
         self.find_window();
         self.hook_styles_box();
@@ -672,10 +859,19 @@ impl Component for Editor {
                 self.in_flight.remove(&id);
                 self.pending_content.remove(&id);
                 let focus = self.active.is_none() && host.kind == HostKind::Flow;
+                if host.kind == HostKind::Flow {
+                    self.flow_hosts.borrow_mut().push(Rc::downgrade(&host));
+                }
                 self.hosts.insert(id, host);
                 self.refresh_headings(id);
+                self.refresh_rules(id);
                 if focus || self.active == Some(id) {
                     self.active = Some(id);
+                    if let Some(editor) = self.editors.get(&id) {
+                        _ = editor.request_focus();
+                    }
+                } else if self.mode == Mode::Source && self.source_id == Some(id) {
+                    // The caret moves into the Markdown, out of the hidden visual page.
                     if let Some(editor) = self.editors.get(&id) {
                         _ = editor.request_focus();
                     }
@@ -694,6 +890,20 @@ impl Component for Editor {
                 if loading && let Some(host) = self.hosts.get(&id) {
                     host.attach_menus(id, &context.sender());
                 }
+                // Typing moves the caret before the text change is reported; the headings
+                // after it have moved too.
+                if !loading {
+                    self.follow_edit(id);
+                }
+                // In the Markdown view, the caret picks out the current heading in Navigation.
+                if !loading
+                    && self.source_id == Some(id)
+                    && let Some(host) = self.hosts.get(&id)
+                {
+                    self.caret = rich::caret(&host.document)
+                        .ok()
+                        .map(|(start, _)| (id, start));
+                }
                 if !loading
                     && self
                         .hosts
@@ -709,21 +919,31 @@ impl Component for Editor {
                     }
                 }
             }
-            Msg::Changed(id) | Msg::Edited(id) => {
+            Msg::Resized(id) => self.refresh_rules(id),
+            // Typing: only what must keep up with each key happens now. The rest reads the
+            // whole document, so it waits until typing pauses (`Msg::Idle`). A change in the
+            // editor's height (a line added or removed) still moves the heading rules at
+            // once, through `Msg::Resized`.
+            Msg::Changed(id) => {
                 self.dirty = true;
-                // Undo and redo change formatting without moving the caret, so the ribbon's
-                // Style box and toggles are read again here.
-                if self.active == Some(id) {
-                    self.refresh_selection();
+                // Typing in the editor with the caret keeps blank page below the line, per
+                // Settings › Options.
+                if typed && self.active == Some(id) {
+                    self.keep_room_below_caret(id);
                 }
-                if self.show_navigation {
-                    self.refresh_headings(id);
-                    if !self.query.is_empty() {
-                        self.run_search();
-                    }
-                    if self.explorer_tab == ExplorerTab::Spelling {
-                        self.check_spelling();
-                    }
+                self.follow_edit(id);
+                self.typed_in.insert(id);
+                host::after_typing(&context.sender());
+            }
+            Msg::Edited(id) => {
+                self.dirty = true;
+                self.typed_in.remove(&id);
+                self.settle(id);
+            }
+            Msg::Idle => {
+                let ids: Vec<Id> = self.typed_in.drain().collect();
+                for id in ids {
+                    self.settle(id);
                 }
             }
             Msg::Pasted(id) => self.normalize(id),
@@ -756,11 +976,6 @@ impl Component for Editor {
                 }
             }
             // Reactor reports a menu click by the item's label.
-            Msg::FileMenu(label) => {
-                if let Some(&(_, command)) = FILE_MENU.iter().find(|(name, _)| *name == label) {
-                    self.run(command);
-                }
-            }
             Msg::StyleChosen(Some(index)) => {
                 if let Some(&(_, kind)) = STYLES.get(index)
                     && kind != self.selection.kind
@@ -771,8 +986,10 @@ impl Component for Editor {
             Msg::StyleChosen(None) => {}
             Msg::Tab(Some(text)) => {
                 self.tab = match text.as_str() {
+                    "File" => Tab::File,
                     "Insert" => Tab::Insert,
                     "View" => Tab::View,
+                    "Help" => Tab::Help,
                     _ => Tab::Home,
                 };
             }
@@ -865,7 +1082,45 @@ impl Component for Editor {
             Msg::DialogClosed(result) => self.close_dialog(result),
             Msg::CloseRequested => self.confirm_discard(Pending::Close),
             Msg::DismissProblem => self.problem = None,
-            Msg::WindowSize(size) => self.window_width = size.width,
+            Msg::WindowSize(size) => {
+                self.window_width = size.width;
+                self.window_height = size.height;
+            }
+            Msg::OpenSettings => self.settings = Some(SettingsCategory::Options),
+            Msg::CloseSettings => {
+                self.settings = None;
+                self.focus_active();
+            }
+            Msg::SettingsCategory(tag) => {
+                if let Some(&(_, _, category)) = SETTINGS_CATEGORIES
+                    .iter()
+                    .find(|(name, ..)| Some(*name) == tag.as_deref())
+                {
+                    self.settings = Some(category);
+                }
+            }
+            Msg::HeadingStyles(on) => self.options.heading_styles = on,
+            Msg::DocumentEditor(on) => {
+                self.options.document_editor = on;
+                // Shown straight away, so the pane is there on returning to the page.
+                if on && !self.show_navigation {
+                    self.run(Command::ToggleNavigation);
+                }
+            }
+            Msg::CursorSpace(index) => {
+                if let Some(&(_, space)) = index.and_then(|index| CURSOR_SPACES.get(index)) {
+                    self.options.cursor_space = space;
+                }
+            }
+            Msg::ParagraphSize(index) => {
+                if let Some(&(_, size)) = index.and_then(|index| PARAGRAPH_SIZES.get(index))
+                    && size != self.options.paragraph_size
+                {
+                    self.options.paragraph_size = size;
+                    rich::set_body_size(size);
+                    self.restyle_page();
+                }
+            }
             Msg::ColorScheme(scheme) => {
                 self.scheme = scheme;
                 // The accent may have changed with the theme in Settings; read it again.
@@ -900,15 +1155,35 @@ impl Component for Editor {
                 // Ignore the slider echoing a zoom set elsewhere.
                 if (zoom - self.zoom).abs() > 0.005 {
                     self.zoom = zoom;
+                    self.page_fit = false;
                 }
             }
             Msg::ZoomPreset(Some(index)) => {
                 if let Some(&percent) = ZOOM_PRESETS.get(index) {
                     self.run(Command::Zoom(Zoom::To(percent)));
+                } else if index == ZOOM_PRESETS.len() {
+                    self.run(Command::Zoom(Zoom::PageWidth));
+                }
+            }
+            Msg::WheelZoom(delta) => {
+                // A step for each whole notch; a reversed direction drops what was gathered.
+                if delta.signum() != self.wheel_zoom.signum() {
+                    self.wheel_zoom = 0;
+                }
+                self.wheel_zoom += delta;
+                while self.wheel_zoom.abs() >= WHEEL_NOTCH {
+                    let up = self.wheel_zoom > 0;
+                    self.wheel_zoom -= WHEEL_NOTCH * self.wheel_zoom.signum();
+                    self.run(Command::Zoom(if up { Zoom::In } else { Zoom::Out }));
                 }
             }
             Msg::ZoomPreset(None) => {}
-            Msg::Navigate(id, position) => self.navigate(id, (position, position), 0.0, context),
+            Msg::Navigate(id, position) => {
+                // A heading goes to the top of the window, as in Word, whatever is below it.
+                self.reach_room = true;
+                self.navigating.set(true);
+                self.navigate(id, (position, position), 0.0, context);
+            }
             Msg::ExplorerTab(Some(text)) => {
                 self.explorer_tab = match text.as_str() {
                     "Find" => ExplorerTab::Find,
@@ -1032,12 +1307,11 @@ impl Component for Editor {
                 }
             }
         }
+        self.apply_zoom();
         self.close_guard.dirty.set(self.dirty);
+        self.visual_page
+            .set(self.mode == Mode::Visual && self.settings.is_none() && self.dialog.is_none());
         self.remember_choices();
-    }
-
-    fn view(&self, _: &Option<PathBuf>, context: &mut ViewContext<Self>) -> View {
-        self.render(context)
     }
 }
 
@@ -1068,6 +1342,7 @@ impl Editor {
         self.in_flight.remove(&id);
         self.pending_content.remove(&id);
         self.headings.remove(&id);
+        self.heading_lengths.remove(&id);
         if self.active == Some(id) {
             self.active = None;
         }
@@ -1107,12 +1382,16 @@ impl Editor {
     /// Replaces the page with `document`. Flows are kept between every object so there is
     /// always somewhere to type.
     fn load(&mut self, document: Document) {
+        self.reach_room = false;
+        self.navigating.set(false);
         for id in self.segments.iter().map(Segment::id).collect::<Vec<_>>() {
             self.forget_editor(id);
         }
         if let Some(id) = self.source_id.take() {
             self.forget_editor(id);
         }
+        self.source_snapshot = None;
+        self.visual_active = None;
         self.properties = document.properties;
         let mut segments = Vec::new();
         let mut flow = Vec::new();
@@ -1166,6 +1445,10 @@ impl Editor {
             ribbon,
             dark_page: self.dark_page,
             explorer_width: Some(self.navigation_width),
+            heading_styles: self.options.heading_styles,
+            document_editor: self.options.document_editor,
+            cursor_space: Some(self.options.cursor_space),
+            paragraph_size: Some(self.options.paragraph_size),
         };
         if *settings != next {
             *settings = next;
@@ -1223,11 +1506,13 @@ impl Editor {
     fn attach_pending(&mut self, context: &ComponentContext<Self>) {
         if !self.root_hooked {
             let sender = context.sender();
+            let navigating = Rc::clone(&self.navigating);
             self.root_hooked = self.root.request_native_object(move |result| {
                 let hooked = result
                     .map_err(|error| format!("{error:?}"))
                     .and_then(|object| {
-                        host::hook_root(object, sender.clone()).map_err(|e| e.to_string())
+                        host::hook_root(object, sender.clone(), Rc::clone(&navigating))
+                            .map_err(|e| e.to_string())
                     });
                 if let Err(error) = hooked {
                     crate::log::log!("window shortcuts are unavailable: {error}");
@@ -1366,34 +1651,28 @@ impl Editor {
             Command::New => self.confirm_discard(Pending::New),
             Command::Open => self.confirm_discard(Pending::Open),
             Command::Save => self.save(false),
-            Command::About => {
-                self.dialog = Some(Dialog {
-                    kind: DialogKind::About,
-                    fields: Vec::new(),
-                });
-            }
+            Command::About => self.settings = Some(SettingsCategory::About),
+            Command::OpenUrl(url) => open_url(url),
             Command::SaveAs => self.save(true),
+            Command::Rename => {
+                // Only a page saved to a file has a name to change.
+                if let Some(path) = &self.path {
+                    let name = path
+                        .file_stem()
+                        .map(|stem| stem.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    self.dialog = Some(Dialog {
+                        kind: DialogKind::Rename,
+                        fields: vec![name],
+                    });
+                }
+            }
             Command::Mode(mode) => self.set_mode(mode),
             Command::Theme(choice) => self.theme = choice,
             Command::SwitchBackground => {
                 self.dark_page = !self.dark_page;
                 rich::set_dark_page(self.dark_page);
-                // Rebuild the page so its text takes the new colors, as switching back from
-                // the Markdown source does. The page is unchanged, so it stays saved or not.
-                if self.mode == Mode::Visual {
-                    let markdown = self.markdown();
-                    let dirty = self.dirty;
-                    self.load(parse(&markdown));
-                    self.dirty = dirty;
-                } else if let Some(old) = self.source_id {
-                    // A fresh source editor, with the text as it is, takes the new colors.
-                    let text = self.markdown();
-                    self.forget_editor(old);
-                    let id = self.new_id();
-                    self.track_editor(id, Content::Plain(text));
-                    self.source_id = Some(id);
-                    self.active = None;
-                }
+                self.restyle_page();
             }
             Command::ToggleProperties => self.show_properties = !self.show_properties,
             Command::Zoom(change) => {
@@ -1403,7 +1682,10 @@ impl Editor {
                     Zoom::In => ((percent / 10.0).floor() + 1.0) * 10.0,
                     Zoom::Out => ((percent / 10.0).ceil() - 1.0) * 10.0,
                     Zoom::To(percent) => f64::from(percent),
+                    Zoom::PageWidth => 100.0,
                 };
+                // Any other zoom leaves Page Width, and the page goes back to its usual width.
+                self.page_fit = change == Zoom::PageWidth;
                 self.zoom = (target / 100.0).clamp(MIN_ZOOM, MAX_ZOOM);
             }
             Command::Search(tab) => {
@@ -1493,11 +1775,38 @@ impl Editor {
                 }
                 self.dirty = true;
                 self.refresh_selection();
-                if let Some(id) = self.active.filter(|_| self.show_navigation) {
-                    self.refresh_headings(id);
+                if let Some(id) = self.active {
+                    // A style change can make or unmake a heading without changing the
+                    // editor's height.
+                    self.refresh_rules(id);
+                    if self.show_navigation {
+                        self.refresh_headings(id);
+                    }
                 }
                 self.focus_active();
             }
+        }
+    }
+
+    /// Rebuilds the page so its text takes new page colors or a new paragraph size, as
+    /// switching back from the Markdown source does. The page is unchanged, so it stays saved
+    /// or not.
+    fn restyle_page(&mut self) {
+        if self.mode == Mode::Visual {
+            let markdown = self.markdown();
+            let dirty = self.dirty;
+            self.load(parse(&markdown));
+            self.dirty = dirty;
+        } else if let Some(old) = self.source_id {
+            // A fresh source editor, with the text as it is, takes the new colors. The hidden
+            // visual page has the old styling, so it is rebuilt on the way back.
+            self.source_snapshot = None;
+            let text = self.markdown();
+            self.forget_editor(old);
+            let id = self.new_id();
+            self.track_editor(id, Content::Plain(text));
+            self.source_id = Some(id);
+            self.active = None;
         }
     }
 
@@ -1505,26 +1814,60 @@ impl Editor {
         if mode == self.mode {
             return;
         }
+        // Both views stay on the page, the one not in use hidden (see `view::page`), so
+        // switching does not rebuild the visual page's editors unless the Markdown changed.
         match mode {
             Mode::Source => {
                 let markdown = serialize(&self.collect());
-                let id = self.new_id();
-                self.track_editor(id, Content::Plain(markdown));
-                self.source_id = Some(id);
-                self.mode = Mode::Source;
-                // The visual editors leave the tree; switching back rebuilds them from the source.
-                for id in self.segments.iter().map(Segment::id).collect::<Vec<_>>() {
-                    self.hosts.remove(&id);
+                self.visual_active = self.active;
+                match self.source_id {
+                    // The Markdown editor from last time: given the page's Markdown as it is now.
+                    Some(id) if self.hosts.contains_key(&id) => {
+                        let host = Rc::clone(&self.hosts[&id]);
+                        if !same_markdown(&host.plain_text(), &markdown)
+                            && let Err(error) = host.write_plain(&markdown)
+                        {
+                            crate::log::log!("updating the Markdown failed: {error:?}");
+                        }
+                        self.refresh_headings(id);
+                        if let Some(editor) = self.editors.get(&id) {
+                            _ = editor.request_focus();
+                        }
+                    }
+                    // Not attached yet: it starts with this text instead.
+                    Some(id) => {
+                        self.pending_content
+                            .insert(id, Content::Plain(markdown.clone()));
+                    }
+                    None => {
+                        let id = self.new_id();
+                        self.track_editor(id, Content::Plain(markdown.clone()));
+                        self.source_id = Some(id);
+                    }
                 }
+                self.source_snapshot = Some(markdown);
+                self.mode = Mode::Source;
+                self.active = None;
             }
             Mode::Visual => {
                 let markdown = self.markdown();
-                let dirty = self.dirty;
-                self.load(parse(&markdown));
-                self.dirty = dirty;
+                let unchanged = self
+                    .source_snapshot
+                    .as_deref()
+                    .is_some_and(|snapshot| same_markdown(snapshot, &markdown));
+                if unchanged {
+                    // The visual page is still as it was: show it again, caret and all.
+                    self.mode = Mode::Visual;
+                    self.active = self.visual_active.filter(|id| self.hosts.contains_key(id));
+                    self.focus_active();
+                } else {
+                    let dirty = self.dirty;
+                    self.load(parse(&markdown));
+                    self.dirty = dirty;
+                    self.active = None;
+                }
             }
         }
-        self.active = None;
     }
 
     /// Re-reads a flow after a paste so only formatting Markdown can hold remains.
@@ -1539,11 +1882,18 @@ impl Editor {
         let document = &host.document;
         let selection = rich::caret(document);
         let paragraphs = host.paragraphs();
+        // The rewrite keeps the caret where it is (see `rich::rewrite`), and the display is held
+        // until the content is final, so the page does not scroll while the flow is rewritten.
+        let batched = document.BatchDisplayUpdates().is_ok();
+        let (start, end) = selection.as_ref().map_or((0, 0), |&selection| selection);
         // Always runs, even if the caret is unknown: it closes the paste's undo group.
-        if host.rewrite_after_paste(&paragraphs).is_ok()
-            && let Ok(selection) = selection
+        if let Ok(moved) = host.rewrite_after_paste(&paragraphs, start)
+            && selection.is_ok()
         {
-            _ = rich::set_caret(document, selection);
+            _ = rich::set_caret(document, (moved, moved + (end - start)));
+        }
+        if batched {
+            _ = document.ApplyDisplayUpdates();
         }
         self.dirty = true;
     }
@@ -1671,7 +2021,7 @@ impl Editor {
             DialogKind::Link => vec![String::new(), selected],
             DialogKind::PageLink => vec![selected.clone(), String::new()],
             DialogKind::Image | DialogKind::Video => vec![String::new(), String::new()],
-            DialogKind::Discard(_) | DialogKind::About => Vec::new(),
+            DialogKind::Discard(_) | DialogKind::Rename => Vec::new(),
         };
         self.dialog = Some(Dialog { kind, fields });
     }
@@ -1698,7 +2048,6 @@ impl Editor {
                 ContentDialogResult::Secondary => self.continue_pending(pending),
                 _ => {}
             },
-            DialogKind::About => self.focus_active(),
             _ if result != ContentDialogResult::Primary => self.focus_active(),
             DialogKind::Link | DialogKind::PageLink => {
                 let (link, label) = if dialog.kind == DialogKind::Link {
@@ -1722,6 +2071,41 @@ impl Editor {
                     self.insert_block(Block::Media(Media::new(&field(0), &field(1))));
                 }
             }
+            DialogKind::Rename => {
+                self.rename(&field(0));
+                self.focus_active();
+            }
+        }
+    }
+
+    /// Renames the open file in its folder. Without an extension, the name keeps the file's own.
+    fn rename(&mut self, name: &str) {
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+        let target = match renamed_path(&path, name) {
+            Ok(Some(target)) => target,
+            Ok(None) => return,
+            Err(problem) => {
+                self.report(problem);
+                return;
+            }
+        };
+        // Windows names ignore case, so a change of case alone is the same file.
+        let same_file = target.to_string_lossy().to_lowercase() == path.to_string_lossy().to_lowercase();
+        if target.exists() && !same_file {
+            self.report(format!(
+                "There is already a file called {} in this folder.",
+                file_name(&target)
+            ));
+            return;
+        }
+        match std::fs::rename(&path, &target) {
+            Ok(()) => {
+                self.status = format!("Renamed to {}", file_name(&target));
+                self.path = Some(target);
+            }
+            Err(error) => self.report(format!("The file could not be renamed: {error}")),
         }
     }
 
@@ -1873,22 +2257,240 @@ fn now() -> String {
     format!("{:02}:{:02}", time.hour, time.minute)
 }
 
+/// The path a file would have under the name typed in the Rename dialog, in the same folder.
+/// None when the name is empty or unchanged; an error for a name Windows does not allow.
+fn renamed_path(
+    path: &std::path::Path,
+    name: &str,
+) -> Result<Option<PathBuf>, String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    if let Some(bad) = name.chars().find(|c| r#"<>:"/\|?*"#.contains(*c) || c.is_control()) {
+        return Err(format!("A file name can't contain {bad}."));
+    }
+    if name.ends_with('.') {
+        return Err("A file name can't end with a full stop.".into());
+    }
+    // Without an extension, the file keeps its own (.md).
+    let mut file = PathBuf::from(name);
+    if file.extension().is_none()
+        && let Some(extension) = path.extension()
+    {
+        file.set_extension(extension);
+    }
+    let target = path.with_file_name(file);
+    Ok((target != path).then_some(target))
+}
+
+/// Whether two Markdown texts are the same page, ignoring how lines end (the editor reads its
+/// text back with its own line breaks) and blank lines at the end.
+/// An editor's length (its story length, in the positions headings and the caret use).
+fn story_length(host: &Host) -> Option<i32> {
+    host.document
+        .GetRange(0, 0)
+        .and_then(|range| range.StoryLength())
+        .ok()
+}
+
+fn same_markdown(a: &str, b: &str) -> bool {
+    let normal = |text: &str| text.replace("\r\n", "\n").replace('\r', "\n");
+    normal(a).trim_end_matches('\n') == normal(b).trim_end_matches('\n')
+}
+
+/// The headings of the Markdown view's text, each at the editor position its line starts on.
+fn source_headings(text: &str) -> Vec<rich::HeadingInfo> {
+    // Where each line starts, in the editor's UTF-16 positions.
+    let mut starts = vec![0];
+    let mut position = 0;
+    for character in text.chars() {
+        position += character.len_utf16() as i32;
+        if character == '\n' {
+            starts.push(position);
+        }
+    }
+    crate::markdown::headings(text)
+        .into_iter()
+        .filter_map(|heading| {
+            Some(rich::HeadingInfo {
+                level: heading.level,
+                text: heading.text,
+                position: *starts.get(heading.line)?,
+            })
+        })
+        .collect()
+}
+
+/// Opens a web address in the default browser.
+fn open_url(url: &str) {
+    #[link(name = "shell32")]
+    unsafe extern "system" {
+        fn ShellExecuteW(
+            hwnd: *mut core::ffi::c_void,
+            operation: *const u16,
+            file: *const u16,
+            parameters: *const u16,
+            directory: *const u16,
+            show: i32,
+        ) -> *mut core::ffi::c_void;
+    }
+    const SW_SHOWNORMAL: i32 = 1;
+    let wide = |s: &str| s.encode_utf16().chain([0]).collect::<Vec<u16>>();
+    let (operation, file) = (wide("open"), wide(url));
+    // SAFETY: both strings are null-terminated and outlive the call; the rest may be null.
+    let result = unsafe {
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            operation.as_ptr(),
+            file.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // ShellExecute returns a value above 32 on success.
+    if result as usize <= 32 {
+        crate::log::log!("could not open {url}: ShellExecute returned {}", result as usize);
+    }
+}
+
 impl Editor {
-    /// Re-reads the headings of one text flow for the Navigation pane.
-    fn refresh_headings(&mut self, id: Id) {
-        let Some(host) = self
+    /// After any change of zoom (the slider, the zoom box, Ctrl+wheel, the shortcuts): rewrites
+    /// every editor's text at the new zoom (see `rich::rescale`), which clears their undo
+    /// history, and measures the heading rules again. Editors not attached yet are written at
+    /// the new zoom when they are.
+    fn apply_zoom(&mut self) {
+        let zoom = self.zoom as f32;
+        if (rich::zoom() - zoom).abs() < f32::EPSILON {
+            return;
+        }
+        let started = std::time::Instant::now();
+        let from = rich::zoom();
+        let typing: Vec<Option<f32>> = self.hosts.values().map(|host| host.typing_size()).collect();
+        let documents: Vec<&crate::winui::RichEditTextDocument> =
+            self.hosts.values().map(|host| &host.document).collect();
+        if let Err(error) = rich::rescale(&documents, zoom) {
+            crate::log::log!("zooming the text failed: {error:?}");
+        }
+        for (host, typing) in self.hosts.values().zip(typing) {
+            host.fit_zoom(typing, from, zoom);
+        }
+        crate::log::log!(
+            "zoom {zoom}: text rescaled in {:.1} ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+        let flows: Vec<Id> = self
             .hosts
-            .get(&id)
-            .filter(|host| host.kind == HostKind::Flow)
-        else {
+            .iter()
+            .filter(|(_, host)| host.kind == HostKind::Flow)
+            .map(|(&id, _)| id)
+            .collect();
+        for id in flows {
+            self.refresh_rules(id);
+        }
+    }
+
+    /// Brings everything read from an editor's whole document up to date after it changed:
+    /// the heading rules, the ribbon, and the Navigation pane's headings, search results and
+    /// spelling.
+    fn settle(&mut self, id: Id) {
+        if !self.hosts.contains_key(&id) {
+            return;
+        }
+        self.refresh_rules(id);
+        // Undo and redo change formatting without moving the caret, so the ribbon's Style box
+        // and toggles are read again here.
+        if self.active == Some(id) {
+            self.refresh_selection();
+        }
+        if self.show_navigation {
+            self.refresh_headings(id);
+            if !self.query.is_empty() {
+                self.run_search();
+            }
+            if self.explorer_tab == ExplorerTab::Spelling {
+                self.check_spelling();
+            }
+        }
+    }
+
+    /// Measures where one text flow's heading rules go.
+    fn refresh_rules(&mut self, id: Id) {
+        let Some(host) = self.hosts.get(&id).filter(|host| host.kind == HostKind::Flow) else {
             return;
         };
-        match rich::headings(&host.document) {
-            Ok(headings) => {
-                self.headings.insert(id, headings);
+        match rich::heading_rules(&host.document) {
+            Ok(rules) => {
+                if self.rules.get(&id) != Some(&rules) {
+                    self.rules.insert(id, rules);
+                }
             }
-            Err(error) => crate::log::log!("reading headings failed: {error:?}"),
+            Err(error) => crate::log::log!("measuring heading rules failed: {error:?}"),
         }
+    }
+
+    /// Re-reads the headings of one text flow for the Navigation pane.
+    fn refresh_headings(&mut self, id: Id) {
+        let Some(host) = self.hosts.get(&id) else {
+            return;
+        };
+        let length = story_length(host);
+        // The Markdown view: its headings are read from the Markdown, at their lines.
+        if self.source_id == Some(id) {
+            let headings = source_headings(&host.plain_text());
+            self.headings.insert(id, headings);
+        } else if host.kind == HostKind::Flow {
+            match rich::headings(&host.document) {
+                Ok(headings) => {
+                    self.headings.insert(id, headings);
+                }
+                Err(error) => {
+                    crate::log::log!("reading headings failed: {error:?}");
+                    return;
+                }
+            }
+        } else {
+            return;
+        }
+        match length {
+            Some(length) => self.heading_lengths.insert(id, length),
+            None => self.heading_lengths.remove(&id),
+        };
+    }
+
+    /// Keeps the Navigation pane's headings in step with typing, between full re-reads (once
+    /// typing pauses; see `settle`). An edit shifts every heading after it by the change in
+    /// the editor's length, so the current heading stays highlighted instead of jumping to
+    /// the next one as the caret passes where that one used to start. Cheap: one length.
+    fn follow_edit(&mut self, id: Id) {
+        let Some(host) = self.hosts.get(&id) else {
+            return;
+        };
+        let (Some(&old), Some(new)) = (self.heading_lengths.get(&id), story_length(host)) else {
+            return;
+        };
+        let change = new - old;
+        if change == 0 {
+            return;
+        }
+        // Where the edit was: the earlier of the caret before it and after it (before for
+        // typing, after for deleting backwards). A heading that starts there is the one
+        // being typed in, and does not move.
+        let after = rich::caret(&host.document).ok().map(|(start, _)| start);
+        let before = self
+            .caret
+            .filter(|(editor, _)| *editor == id)
+            .map(|(_, position)| position);
+        let Some(edit) = before.into_iter().chain(after).min() else {
+            return;
+        };
+        for heading in self.headings.get_mut(&id).into_iter().flatten() {
+            if heading.position > edit {
+                heading.position += change;
+            }
+        }
+        self.heading_lengths.insert(id, new);
     }
 
     /// Moves the caret to a heading and scrolls it to the top of the page, like clicking a
@@ -1909,7 +2511,10 @@ impl Editor {
         if rich::set_caret(&host.document, range).is_err() {
             return;
         }
-        self.active = Some(id);
+        // The ribbon follows the text flow with the caret; the Markdown editor is not one.
+        if host.kind == HostKind::Flow {
+            self.active = Some(id);
+        }
         self.caret = Some((id, position));
         self.refresh_selection();
         // Focusing the editor scrolls the page to the editor itself, so the scroll to the
@@ -1925,17 +2530,70 @@ impl Editor {
         }
     }
 
+    /// The blank page kept below the caret, per Settings › Options, in pixels: a share of the
+    /// window, whatever the zoom (the page is laid out at its zoomed size; see `rich::zoom`).
+    pub(super) fn cursor_room(&self) -> f64 {
+        // The page's share of the window: less the title band, ribbon and status bar.
+        self.viewport() * f64::from(self.options.cursor_space) / 100.0
+    }
+
+    /// The page's share of the window: less the title band, ribbon and status bar.
+    fn viewport(&self) -> f64 {
+        (self.window_height - 170.0).max(200.0)
+    }
+
+    /// The blank page at the end: the room below the cursor, or after a Navigation pane jump a
+    /// whole window, so the last heading can still reach the top (see `reach_room`).
+    pub(super) fn end_room(&self) -> f64 {
+        if self.reach_room {
+            self.cursor_room().max(self.viewport())
+        } else {
+            self.cursor_room()
+        }
+    }
+
+    /// Scrolls the page, if needed, so the caret has the chosen room below it.
+    fn keep_room_below_caret(&self, id: Id) {
+        let room = self.cursor_room();
+        // Diagnostic: KB_NO_ROOM=1 skips this scroll, to measure what it costs while typing.
+        if room <= 0.0 || crate::log::switch("KB_NO_ROOM") {
+            return;
+        }
+        if let Some(host) = self.hosts.get(&id)
+            && let Err(error) = host.keep_room_below_caret(room)
+        {
+            crate::log::log!("keeping room below the caret failed: {error:?}");
+        }
+    }
+
     /// The document's headings in page order, for the Navigation pane.
     pub fn outline(&self) -> Vec<OutlineEntry> {
+        // The editors whose headings make the outline, in page order: the text flows, or in
+        // the Markdown view its one editor.
+        let editors: Vec<Id> = match (self.mode, self.source_id) {
+            (Mode::Source, Some(id)) => vec![id],
+            _ => self
+                .segments
+                .iter()
+                .filter_map(|segment| match segment {
+                    Segment::Flow { id, .. } => Some(*id),
+                    _ => None,
+                })
+                .collect(),
+        };
+        let order: Vec<Id> = match self.mode {
+            Mode::Source => editors.clone(),
+            Mode::Visual => self.segments.iter().map(Segment::id).collect(),
+        };
         let caret = self.caret.and_then(|(id, position)| {
-            let index = self.segments.iter().position(|s| s.id() == id)?;
+            let index = order.iter().position(|&editor| editor == id)?;
             Some((index, position))
         });
         let mut occurrences: HashMap<(u8, String), usize> = HashMap::new();
         let mut entries: Vec<OutlineEntry> = Vec::new();
         let mut current = None;
-        for (index, segment) in self.segments.iter().enumerate() {
-            let Segment::Flow { id, .. } = segment else {
+        for id in &editors {
+            let Some(index) = order.iter().position(|editor| editor == id) else {
                 continue;
             };
             for heading in self.headings.get(id).into_iter().flatten() {
@@ -2310,6 +2968,26 @@ fn hook_styles_box(styles_box: &ElementRef<ComboBox>, hooked: &Rc<std::cell::Cel
 #[cfg(test)]
 mod zoom_tests {
     use super::*;
+
+    #[test]
+    fn a_renamed_file_keeps_its_folder_and_extension() {
+        let path = std::path::Path::new(r"C:\KB\old name.md");
+        let renamed = |name| renamed_path(path, name);
+        assert_eq!(renamed("New name"), Ok(Some(PathBuf::from(r"C:\KB\New name.md"))));
+        assert_eq!(renamed("notes.txt"), Ok(Some(PathBuf::from(r"C:\KB\notes.txt"))));
+        assert_eq!(renamed("  "), Ok(None));
+        assert_eq!(renamed("old name"), Ok(None));
+        assert!(renamed("a/b").is_err());
+        assert!(renamed("what?").is_err());
+        assert!(renamed("trailing.").is_err());
+    }
+
+    #[test]
+    fn markdown_read_back_from_the_editor_matches_what_it_was_given() {
+        assert!(same_markdown("# A\n\nText\n", "# A\r\rText"));
+        assert!(same_markdown("a\r\nb", "a\nb\n\n"));
+        assert!(!same_markdown("# A\n\nText", "# A\n\nText!"));
+    }
 
     #[test]
     fn slider_has_100_percent_in_the_middle() {

@@ -19,10 +19,11 @@ pub const BODY_FONT: &str = "Segoe UI";
 pub const CODE_FONT: &str = "Cascadia Mono";
 pub const MATH_FONT: &str = "Cambria Math";
 const SYMBOL_FONT: &str = "Segoe UI Symbol";
-/// SharePoint's Normal text, 18px (13.5pt).
-pub const BODY_SIZE: f32 = 13.5;
-/// SharePoint's headings: 28, 24, 20 and 18px; levels 5 and 6 stay at body size.
-const HEADING_SIZES: [f32; 6] = [21.0, 18.0, 15.0, 13.5, 13.5, 13.5];
+/// Normal text's size in points when Settings › Options › Paragraph font size is not set:
+/// 14px (10.5pt), as SharePoint shows it.
+pub const DEFAULT_BODY_SIZE: f32 = 10.5;
+/// SharePoint's headings 1 to 4: 28, 24, 20 and 18px. Levels 5 and 6 are at body size.
+const HEADING_SIZES: [f32; 4] = [21.0, 18.0, 15.0, 13.5];
 /// Each list level, and the hanging indent of an item: its marker sits in the hang and its
 /// text (wrapped lines and line breaks too) lines up after it, with the next level's marker
 /// under it, as in Word.
@@ -83,6 +84,119 @@ pub const DARK_PAGE: PageColors = PageColors {
 
 thread_local! {
     static DARK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static BODY: std::cell::Cell<f32> = const { std::cell::Cell::new(DEFAULT_BODY_SIZE) };
+    static ZOOM: std::cell::Cell<f32> = const { std::cell::Cell::new(1.0) };
+}
+
+/// The page zoom (1 is 100%). Zoom is real, as in Word: font sizes, spacing and indents are
+/// written into the editors multiplied by it, and divided by it when read back, so the page is
+/// always drawn at its natural scale. (Scaling the drawn page instead, with a Viewbox or the
+/// ScrollViewer's zoom, made WinUI redraw far more on every key.) Change it with [`rescale`].
+pub fn zoom() -> f32 {
+    ZOOM.with(std::cell::Cell::get)
+}
+
+/// A length in points at 100%, as written at the current zoom.
+fn zoomed(points: f32) -> f32 {
+    points * zoom()
+}
+
+/// A length in points as read from an editor, back at 100%.
+fn unzoomed(points: f32) -> f32 {
+    points / zoom()
+}
+
+/// Every size, spacing and indent the app writes is a multiple of half a point at 100%, so a
+/// value read back at `zoom` rounds to exactly what was written, however often zoom changes.
+fn base_points(points: f32, zoom: f32) -> f32 {
+    (points / zoom * 2.0).round() / 2.0
+}
+
+/// A size written at zoom `from` (see `base_points`), as it is to be at zoom `to`.
+pub fn rezoomed(points: f32, from: f32, to: f32) -> f32 {
+    base_points(points, from) * to
+}
+
+/// The size of code in the Markdown view and in code, math and raw blocks, in points at 100%.
+pub const PLAIN_SIZE: f32 = 10.0;
+
+/// The code font size at the current zoom, for plain (Markdown and code) editors.
+pub fn plain_size() -> f32 {
+    zoomed(PLAIN_SIZE)
+}
+
+/// Sets the zoom for text written from now on, and rewrites `documents` (every editor) at it:
+/// each font size, paragraph spacing, indent and list tab. Their undo history is cleared,
+/// since undoing past this would bring back sizes from the old zoom. Caret and selection stay.
+pub fn rescale(documents: &[&RichEditTextDocument], zoom: f32) -> Result<()> {
+    let from = ZOOM.with(|cell| cell.replace(zoom));
+    if (from - zoom).abs() < f32::EPSILON {
+        return Ok(());
+    }
+    let mut result = Ok(());
+    for document in documents {
+        // Held, so the many small changes are laid out and drawn once.
+        let batched = document.BatchDisplayUpdates().is_ok();
+        let outcome = rescale_document(document, from, zoom)
+            .and_then(|()| document.ClearUndoRedoHistory());
+        if batched {
+            _ = document.ApplyDisplayUpdates();
+        }
+        result = result.and(outcome);
+    }
+    result
+}
+
+fn rescale_document(document: &RichEditTextDocument, from: f32, to: f32) -> Result<()> {
+    let scale = |points: f32| rezoomed(points, from, to);
+    // Typing into an empty editor takes the default format.
+    let default = document.GetDefaultCharacterFormat()?;
+    default.SetSize(scale(default.Size()?))?;
+    document.SetDefaultCharacterFormat(&default)?;
+
+    let story = document.GetRange(0, 0)?.StoryLength()?;
+    // Paragraphs: spacing, indents and the list tab.
+    let range = document.GetRange(0, 0)?;
+    loop {
+        range.Expand(TextRangeUnit::Paragraph)?;
+        let start = range.StartPosition()?;
+        let end = range.EndPosition()?;
+        let format = range.ParagraphFormat()?;
+        format.SetSpaceBefore(scale(format.SpaceBefore()?))?;
+        format.SetSpaceAfter(scale(format.SpaceAfter()?))?;
+        format.SetListTab(scale(format.ListTab()?))?;
+        format.SetIndents(
+            scale(format.FirstLineIndent()?),
+            scale(format.LeftIndent()?),
+            scale(format.RightIndent()?),
+        )?;
+        if end >= story || end <= start {
+            break;
+        }
+        range.SetRange(end, end)?;
+    }
+    // Runs of one character format (hidden link addresses included): their size.
+    let mut position = 0;
+    while position < story {
+        let run = document.GetRange(position, position + 1)?;
+        run.Expand(TextRangeUnit::CharacterFormat)?;
+        let next = run.EndPosition()?.max(position + 1);
+        run.SetStartPosition(position)?;
+        let format = run.CharacterFormat()?;
+        format.SetSize(scale(format.Size()?))?;
+        position = next;
+    }
+    Ok(())
+}
+
+/// Sets the size, in points, of Normal text (and quotes, lists and headings 5 and 6) styled
+/// from now on: Settings › Options › Paragraph font size.
+pub fn set_body_size(points: f32) {
+    BODY.with(|cell| cell.set(points));
+}
+
+pub fn body_size() -> f32 {
+    BODY.with(std::cell::Cell::get)
 }
 
 /// Chooses the dark or light page colors for text styled from now on.
@@ -143,17 +257,75 @@ fn text_of(range: &ITextRange, options: TextGetOptions) -> Result<String> {
 
 /// Replaces the whole document with `paragraphs`, starting a fresh undo history (for loading).
 pub fn write(document: &RichEditTextDocument, paragraphs: &[Paragraph]) -> Result<()> {
-    document.SetText(TextSetOptions::None, &layout(paragraphs).0)?;
-    style(document, paragraphs)?;
-    document.ClearUndoRedoHistory()
+    // Styling is many small edits; on an editor already on screen (switching back from the
+    // Markdown view) each would be laid out and drawn. Held, they are laid out once.
+    let batched = document.BatchDisplayUpdates().is_ok();
+    let result = document
+        .SetText(TextSetOptions::None, &layout(paragraphs).0)
+        .and_then(|()| style(document, paragraphs))
+        .and_then(|()| document.ClearUndoRedoHistory());
+    if batched {
+        _ = document.ApplyDisplayUpdates();
+    }
+    result
 }
 
-/// Replaces the whole document with `paragraphs` as an edit the user can undo.
-pub fn rewrite(document: &RichEditTextDocument, paragraphs: &[Paragraph]) -> Result<()> {
+/// Rewrites the document as `paragraphs`, as an edit the user can undo, and returns where the
+/// text at `caret` now is.
+///
+/// A replaced range that holds the caret drags it to the range's start, and the page scrolls
+/// there and back. So when the text is unchanged (usually, after a paste: only its formatting
+/// changes) it is left alone; otherwise all of it is replaced, so no hidden link text is left
+/// behind, in two pieces split at the caret, which is never inside or at the end of the piece
+/// being replaced.
+pub fn rewrite(
+    document: &RichEditTextDocument,
+    paragraphs: &[Paragraph],
+    caret: i32,
+) -> Result<i32> {
+    let new = layout(paragraphs).0;
+    let all = document.GetRange(0, i32::MAX)?;
+    // With every option off, hidden text (a link's address) is included: it matches the
+    // layout only when there is none, and none is left to remove.
+    let old = text_of(&all, TextGetOptions::None)?;
+    // The story's final paragraph mark, which the layout leaves out and cannot be deleted.
+    if old.strip_suffix('\r').unwrap_or(&old) == new {
+        style(document, paragraphs)?;
+        return Ok(caret);
+    }
+    let caret = caret.clamp(0, all.EndPosition()?);
+    // Where the caret falls in the new text: the visible text before it.
+    let split = new_position(
+        &new,
+        utf16_len(&text_of(&document.GetRange(0, caret)?, TextGetOptions::NoHidden)?),
+    );
+    let new: Vec<u16> = new.encode_utf16().collect();
+    let piece = |from: usize, to: usize| String::from_utf16_lossy(&new[from..to]);
+    // After the caret first: the caret is at that piece's start, where it stays.
     document
-        .GetRange(0, i32::MAX)?
-        .SetText(&layout(paragraphs).0)?;
-    style(document, paragraphs)
+        .GetRange(caret, i32::MAX)?
+        .SetText(&piece(split, new.len()))?;
+    // Then before it, with the caret stepped past the piece so it moves along with the end of
+    // the piece rather than to its start.
+    if caret > 0 {
+        set_caret(document, (caret + 1, caret + 1))?;
+        document.GetRange(0, caret)?.SetText(&piece(0, split))?;
+    }
+    style(document, paragraphs)?;
+    Ok(split as i32)
+}
+
+/// A UTF-16 position in `text`, kept within it and off the second half of a surrogate pair.
+fn new_position(text: &str, position: i32) -> usize {
+    let mut units = 0;
+    for character in text.chars() {
+        let next = units + character.len_utf16();
+        if next as i32 > position {
+            return units;
+        }
+        units = next;
+    }
+    units
 }
 
 type Layout<'a> = (
@@ -231,7 +403,7 @@ fn style(document: &RichEditTextDocument, paragraphs: &[Paragraph]) -> Result<()
             range.SetLink(&quote_link(link))?;
         }
     }
-    Ok(())
+    collapse_heading_spacing(document)
 }
 
 fn quote_link(link: &Link) -> String {
@@ -243,7 +415,7 @@ fn quote_link(link: &Link) -> String {
 
 fn reset_character_format(format: &ITextCharacterFormat, auto: AutoColors) -> Result<()> {
     format.SetName(BODY_FONT)?;
-    format.SetSize(BODY_SIZE)?;
+    format.SetSize(zoomed(body_size()))?;
     format.SetWeight(400)?;
     format.SetItalic(FormatEffect::Off)?;
     format.SetStrikethrough(FormatEffect::Off)?;
@@ -288,6 +460,54 @@ fn apply_paragraph(
     kind_characters(&range.CharacterFormat()?, kind, auto)
 }
 
+/// A paragraph's space before and after, in points. Heading 1 and 2 have the room for the
+/// rule SharePoint draws under them, and below it (see `heading_rules`).
+fn spacing(kind: ParagraphKind, list: Option<ListItem>) -> (f32, f32) {
+    match (kind, list) {
+        (ParagraphKind::Heading(1), _) => (18.0, 16.5),
+        (ParagraphKind::Heading(2), _) => (12.0, 14.0),
+        (ParagraphKind::Heading(_), _) => (12.0, 4.0),
+        (_, Some(_)) => (0.0, 3.0),
+        _ => (0.0, 8.0),
+    }
+}
+
+/// SharePoint's CSS collapses margins: a heading straight under a Heading 1 or 2 shares the
+/// space below its rule rather than adding its own to it. RichEdit adds space after and
+/// before, so such a heading's space before is cut by the space after above it. Run after
+/// any change to paragraph kinds.
+fn collapse_heading_spacing(document: &RichEditTextDocument) -> Result<()> {
+    let story = document.GetRange(0, 0)?.StoryLength()?;
+    let range = document.GetRange(0, 0)?;
+    let mut above: Option<u8> = None;
+    loop {
+        range.Expand(TextRangeUnit::Paragraph)?;
+        let start = range.StartPosition()?;
+        let end = range.EndPosition()?;
+        let format = range.ParagraphFormat()?;
+        let level = heading_level(format.Style()?);
+        if let Some(level) = level {
+            let own = spacing(ParagraphKind::Heading(level), None).0;
+            let before = match above {
+                Some(above @ (1 | 2)) => {
+                    (own - spacing(ParagraphKind::Heading(above), None).1).max(0.0)
+                }
+                _ => own,
+            };
+            // Only when it differs, so an unchanged page gains no undo steps.
+            if (unzoomed(format.SpaceBefore()?) - before).abs() > 0.05 {
+                format.SetSpaceBefore(zoomed(before))?;
+            }
+        }
+        above = level;
+        if end >= story || end <= start {
+            break;
+        }
+        range.SetRange(end, end)?;
+    }
+    Ok(())
+}
+
 /// The paragraph part of [`apply_paragraph`], leaving the text's own formatting alone.
 fn paragraph_format(range: &ITextRange, kind: ParagraphKind, list: Option<ListItem>) -> Result<()> {
     let format = range.ParagraphFormat()?;
@@ -300,19 +520,18 @@ fn paragraph_format(range: &ITextRange, kind: ParagraphKind, list: Option<ListIt
     let left = level * LEVEL_INDENT + if quote { QUOTE_INDENT } else { 0.0 };
     let right = if quote { QUOTE_INDENT } else { 0.0 };
     if list.is_some() {
-        format.SetIndents(-LIST_HANG, left + LIST_HANG, right)?;
-        format.SetListTab(LIST_HANG)?;
+        format.SetIndents(
+            zoomed(-LIST_HANG),
+            zoomed(left + LIST_HANG),
+            zoomed(right),
+        )?;
+        format.SetListTab(zoomed(LIST_HANG))?;
     } else {
-        format.SetIndents(0.0, left, right)?;
+        format.SetIndents(0.0, zoomed(left), zoomed(right))?;
     }
-    let (before, after) = match (kind, list) {
-        (ParagraphKind::Heading(1), _) => (18.0, 6.0),
-        (ParagraphKind::Heading(_), _) => (12.0, 4.0),
-        (_, Some(_)) => (0.0, 3.0),
-        _ => (0.0, 8.0),
-    };
-    format.SetSpaceBefore(before)?;
-    format.SetSpaceAfter(after)?;
+    let (before, after) = spacing(kind, list);
+    format.SetSpaceBefore(zoomed(before))?;
+    format.SetSpaceAfter(zoomed(after))?;
     match list.map(|item| item.kind) {
         Some(ListKind::Bullet) => format.SetListType(MarkerType::Bullet)?,
         Some(ListKind::Numbered) => {
@@ -333,16 +552,20 @@ fn kind_characters(
 ) -> Result<()> {
     match kind {
         ParagraphKind::Heading(level) => {
-            characters.SetSize(HEADING_SIZES[usize::from(level.clamp(1, 6)) - 1])?;
+            let size = HEADING_SIZES
+                .get(usize::from(level.max(1)) - 1)
+                .copied()
+                .unwrap_or_else(body_size);
+            characters.SetSize(zoomed(size))?;
             characters.SetWeight(600)?;
             characters.SetForegroundColor(page_colors().text)?;
         }
         ParagraphKind::Quote => {
-            characters.SetSize(BODY_SIZE)?;
+            characters.SetSize(zoomed(body_size()))?;
             characters.SetForegroundColor(page_colors().quote)?;
         }
         ParagraphKind::Normal => {
-            characters.SetSize(BODY_SIZE)?;
+            characters.SetSize(zoomed(body_size()))?;
             characters.SetForegroundColor(auto.text)?;
         }
     }
@@ -390,14 +613,14 @@ fn read_range(document: &RichEditTextDocument, from: i32, to: i32) -> Result<Vec
 
 fn read_paragraph(document: &RichEditTextDocument, range: &ITextRange) -> Result<Paragraph> {
     let format = range.ParagraphFormat()?;
-    let quote = format.RightIndent()? >= QUOTE_INDENT / 2.0;
+    let quote = unzoomed(format.RightIndent()?) >= QUOTE_INDENT / 2.0;
     let kind = match heading_level(format.Style()?) {
         Some(level) => ParagraphKind::Heading(level),
         None if quote => ParagraphKind::Quote,
         None => ParagraphKind::Normal,
     };
     // Where the first line starts: a list item's hanging indent is not nesting.
-    let indent = format.LeftIndent()? + format.FirstLineIndent()?.min(0.0)
+    let indent = unzoomed(format.LeftIndent()? + format.FirstLineIndent()?.min(0.0))
         - if quote { QUOTE_INDENT } else { 0.0 };
     let level = (indent / LEVEL_INDENT).round().clamp(0.0, 8.0) as u8;
     let list_type = format.ListType()?;
@@ -484,6 +707,35 @@ fn read_inlines(document: &RichEditTextDocument, start: i32, end: i32) -> Result
         position = next;
     }
     Ok(inlines)
+}
+
+/// The link under the point (x, y), relative to the editor, as it should read in a tooltip: a
+/// web address as it is, a page link as the page's name. None off text or on plain text: the
+/// editor maps a point to the nearest place between characters, so the characters either side
+/// are checked to really be under the point.
+pub fn link_at(document: &RichEditTextDocument, x: f32, y: f32) -> Result<Option<String>> {
+    let place = document
+        .GetRangeFromPoint(Point { x, y }, PointOptions::ClientCoordinates)?
+        .StartPosition()?;
+    for position in [place, place - 1] {
+        if position < 0 {
+            continue;
+        }
+        let rect = rect_at(document, position)?;
+        let inside = x >= rect.x
+            && x <= rect.x + rect.width
+            && y >= rect.y
+            && y <= rect.y + rect.height;
+        if !inside {
+            continue;
+        }
+        let link = document.GetRange(position, position + 1)?.Link()?;
+        return Ok(parse_link(&link).map(|link| match link {
+            Link::Url(url) => url,
+            Link::Page(page) => format!("Page: {page}"),
+        }));
+    }
+    Ok(None)
 }
 
 fn parse_link(field: &str) -> Option<Link> {
@@ -662,6 +914,7 @@ pub fn set_paragraph_kind(document: &RichEditTextDocument, kind: ParagraphKind) 
         }
         selection.SetCharacterFormat(&format)?;
     }
+    collapse_heading_spacing(document)?;
     document.EndUndoGroup()
 }
 
@@ -987,6 +1240,41 @@ pub fn headings(document: &RichEditTextDocument) -> Result<Vec<HeadingInfo>> {
     Ok(headings)
 }
 
+/// How far below the bottom of a heading's text its rule sits, in pixels, as SharePoint has
+/// it: about 0.55 of the heading's size.
+fn rule_gap(level: u8) -> f32 {
+    if level == 1 { 15.0 } else { 13.0 }
+}
+
+/// Where SharePoint's rule under Heading 1 and Heading 2 goes in an editor: the top of each,
+/// in pixels from the top of the editor. RichEdit cannot draw paragraph borders, so the page
+/// lays the rules over the editor; they sit in the heading's space after.
+pub fn heading_rules(document: &RichEditTextDocument) -> Result<Vec<f32>> {
+    let story = document.GetRange(0, 0)?.StoryLength()?;
+    let range = document.GetRange(0, 0)?;
+    let mut rules = Vec::new();
+    loop {
+        range.Expand(TextRangeUnit::Paragraph)?;
+        let start = range.StartPosition()?;
+        let end = range.EndPosition()?;
+        if let Some(level @ (1 | 2)) = heading_level(range.ParagraphFormat()?.Style()?) {
+            // The last character before the paragraph mark is on the heading's last line; an
+            // empty heading has only its mark.
+            let last = (end - 2).max(start);
+            let rect = rect_at(document, last)?;
+            // The last line's rectangle takes in the paragraph's space after (points, here
+            // turned to pixels); without it, it ends just below the text's baseline.
+            let after = zoomed(spacing(ParagraphKind::Heading(level), None).1) * 96.0 / 72.0;
+            rules.push(rect.y + rect.height - after + rule_gap(level) * zoom());
+        }
+        if end >= story || end <= start {
+            break;
+        }
+        range.SetRange(end, end)?;
+    }
+    Ok(rules)
+}
+
 /// Where the text at `position` is drawn, relative to the editor.
 pub fn rect_at(document: &RichEditTextDocument, position: i32) -> Result<Rect> {
     let mut rect = Rect::default();
@@ -1155,4 +1443,33 @@ pub fn replace_ranges(
     }
     document.EndUndoGroup()?;
     Ok(ranges.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{base_points, new_position};
+
+    #[test]
+    fn zooming_back_and_forth_does_not_drift_sizes() {
+        // Every zoom step (10% to 500% by tens) and the app's sizes, spacing and indents.
+        let values = [0.0, 1.5, 3.0, 4.0, 8.0, 10.0, 10.5, 12.0, 13.5, 16.5, 18.0, 21.0, 36.0];
+        for step in 1..=50 {
+            let zoom = step as f32 / 10.0;
+            for value in values {
+                // What the editor holds at this zoom: whole twips (1/20 point).
+                let stored = (value * zoom * 20.0).round() / 20.0;
+                assert_eq!(base_points(stored, zoom), value, "{value} at {zoom}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_caret_position_stays_within_the_text_and_whole_characters() {
+        assert_eq!(new_position("abc", 1), 1);
+        assert_eq!(new_position("abc", 0), 0);
+        assert_eq!(new_position("abc", 9), 3);
+        // An emoji is two UTF-16 units: a position between them moves before it.
+        assert_eq!(new_position("a😀b", 2), 1);
+        assert_eq!(new_position("a😀b", 3), 3);
+    }
 }

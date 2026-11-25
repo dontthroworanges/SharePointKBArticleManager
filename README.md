@@ -29,7 +29,7 @@ Every element from Microsoft's [Create and edit a SharePoint Knowledge Base manu
 | Bold, italic, strikethrough, `==highlight==` | Home, Ctrl+B / Ctrl+I / Ctrl+Shift+X / Ctrl+Shift+H |
 | Inline code, inline math `$…$` | Home, Ctrl+Alt+C |
 | Bulleted, numbered and task lists, nesting. Enter starts the next item of the same kind (Enter on an empty item ends the list); wrapped lines line up with the item's text | Home, Ctrl+Shift+L, Tab / Shift+Tab |
-| Links and `[[Page name]]` links | Home or Insert, Ctrl+K |
+| Links and `[[Page name]]` links | Home or Insert, Ctrl+K. Hovering a link shows the hand pointer and, after a moment, its address |
 | Images and videos (`:::image …:::`) | Insert › Picture / Video |
 | Tables | Insert › Table (cells accept inline Markdown) |
 | Code blocks, Mermaid diagrams | Insert › Code block / Diagram |
@@ -37,16 +37,18 @@ Every element from Microsoft's [Create and edit a SharePoint Knowledge Base manu
 | Horizontal rule | Insert › Divider |
 | Properties (YAML front matter) | View › Properties |
 | Markdown source | View › Markdown, or the Visual / Markdown buttons beside the zoom in the status bar |
-| Zoom 10–500% | Status bar slider, View › Zoom, Ctrl++ / Ctrl+- / Ctrl+0 |
+| Zoom 10–500% | Status bar slider, View › Zoom, Ctrl++ / Ctrl+- / Ctrl+0, Ctrl+mouse wheel over the page |
+| Page Width | View › Zoom › Page Width: the page as wide as the window leaves room for, at 100% |
 | Ribbon layouts | Chevron at the end of the ribbon: Single Line Ribbon (one row of small buttons) or Classic Ribbon (groups with large buttons and group names), as in Word for the web |
 | Narrow windows | Ribbon commands (whole groups in the Classic ribbon) that do not fit move into a “More” (…) menu on every tab |
 | Light and dark themes, Mica | View › Theme: follow Windows, Light or Dark. The window uses the Mica backdrop; the page stays white in every theme (unless View › Switch Background is on). The title and tabs sit on Mica too, with no color of their own; the selected tab is underlined in the Windows accent color |
-| SharePoint look | The page uses SharePoint's modern-page type: Segoe UI, 18px body text, 28/24/20/18px semibold headings, #323130 text and #0078D4 links |
+| SharePoint look | The page uses SharePoint's modern-page type: Segoe UI, 14px body text (14, 16 or 18px in Settings › Options), 28/24/20/18px semibold headings with a rule under Heading 1 and 2, #323130 text and #0078D4 links |
 | Dark page | View › Switch Background, as in Word: the page goes dark. The saved file is unchanged |
-| Remembered between sessions | Window position and size (and whether it was maximized), theme, ribbon layout, Switch Background and the Document Editor's width, in `%APPDATA%\SharePoint Article Manager\settings.txt` (settings saved under the app's old name, KB Page Editor, are picked up) |
-| Title bar | The app's name and version at the left; the open document's name centered, followed by "(Unsaved)" when it has changes. File › Save is greyed out while the file is up to date |
+| Remembered between sessions | Window position and size (and whether it was maximized), theme, ribbon layout, Switch Background, the Document Editor's width and the choices in Settings (including Always show the Document Editor), in `%APPDATA%\SharePoint Article Manager\settings.txt` (settings saved under the app's old name, KB Page Editor, are picked up) |
+| Title bar | The app's name and version at the left; the open document's name centered, followed by "(Unsaved)" when it has changes. File › Save is greyed out while the file is up to date. File is a ribbon tab (New page, Open, Rename, Save, Save as) like Home, Insert and View. File › Rename renames the open file in its folder, in a dialog; without an extension the name keeps the file's own (.md) |
 | Right-click menu | Cut, Copy, Paste, Select All (no Bold / Italic row above them); with text selected, the Home tab's Font and Paragraph commands; then the styles. No command popup appears over selected text |
-| About | File › About: version, description and a link to the project on GitHub |
+| Help | Help › About: opens Settings › About (version, description and a link to the project on GitHub). Help › Microsoft Resources: opens Microsoft's guide to creating and editing knowledge base articles in the browser |
+| Settings | The gear at the right end of the tabs shows Settings over the whole window below the title bar, as in Notepad; the back arrow at the top left of the title bar returns to the page. Categories run down the left, as in Windows 11 Settings: Options and About. Options › Always show the Document Editor opens the Document Editor pane at every start (it can still be closed while working). Options › Show heading styles in Navigation adds each heading's style, such as (H2), in grey after its name in the Navigation pane. Options › Space below the cursor keeps blank page below the line being typed (none, a quarter, a third or half the window; a third by default) |
 | Document Editor: Navigation (heading outline: click to jump, collapse), Find (click a result to go to it), Replace, Spelling; drag its right edge to resize (tools that no longer fit move into a "…" menu) | View › Navigation / Find / Replace / Spelling (each opens its tool; click again to close), Ctrl+F, Ctrl+H |
 | Spell check | Windows spell checker: red squiggles in the page; right-click › Proofing for suggestions, Add to dictionary, Ignore. Document Editor › Spelling lists every misspelling (not in code or math) with suggestions: Change, Change all (that word only), Ignore, Ignore all, Apply all |
 
@@ -78,10 +80,13 @@ src/
   app/host.rs        attaches each native RichEditBox: content, events, Word shortcuts
   app/spelling.rs    the Windows spell checker, for the Spelling pane
   app/settings.rs    what is remembered between sessions (window placement, View choices)
+  app/view/settings_page.rs Settings: Options and About (gear at the right of the tabs)
   app/styles_box.rs  the Styles box list, each style in its own look
   app/view/icons.rs  Fluent UI icons as XAML path markup, generated by tools/fluent-icons.ps1
   app/theme.rs       light and dark themes, accent colors, the page's theme
   winui/bindings.rs  generated WinUI bindings (Microsoft.UI.Text and a few others)
+assets/              the app icon: Fluent UI's color "Book Database" (MIT, see LICENSE-fluentui-system-icons),
+                     as SVG, the exe/window .ico (embedded by build.rs) and PNGs for the title bar and About
 tools/bindgen/       regenerates src/winui/bindings.rs (see filter.txt)
 vendor/windows-reactor/  windows-reactor 0.100 with the patches listed below
 ```

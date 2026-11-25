@@ -22,6 +22,14 @@ pub struct Settings {
     pub ribbon: Option<String>,
     pub dark_page: bool,
     pub explorer_width: Option<f64>,
+    /// Settings › Options: show each heading's style in the Navigation pane.
+    pub heading_styles: bool,
+    /// Settings › Options: open the Document Editor pane at every start.
+    pub document_editor: bool,
+    /// Settings › Options: blank room kept below the caret, in percent of the window.
+    pub cursor_space: Option<u8>,
+    /// Settings › Options: Normal text's size in the visual editor, in points.
+    pub paragraph_size: Option<f32>,
 }
 
 impl Settings {
@@ -73,6 +81,10 @@ impl Settings {
                 "ribbon" => settings.ribbon = Some(value.to_string()),
                 "dark_page" => settings.dark_page = value == "1",
                 "explorer_width" => settings.explorer_width = value.parse().ok(),
+                "heading_styles" => settings.heading_styles = value == "1",
+                "document_editor" => settings.document_editor = value == "1",
+                "cursor_space" => settings.cursor_space = value.parse().ok(),
+                "paragraph_size" => settings.paragraph_size = value.parse().ok(),
                 _ => {}
             }
         }
@@ -100,6 +112,14 @@ impl Settings {
         text += &format!("dark_page={}\n", u8::from(self.dark_page));
         if let Some(width) = self.explorer_width {
             text += &format!("explorer_width={width}\n");
+        }
+        text += &format!("heading_styles={}\n", u8::from(self.heading_styles));
+        text += &format!("document_editor={}\n", u8::from(self.document_editor));
+        if let Some(space) = self.cursor_space {
+            text += &format!("cursor_space={space}\n");
+        }
+        if let Some(size) = self.paragraph_size {
+            text += &format!("paragraph_size={size}\n");
         }
         text
     }
@@ -195,6 +215,10 @@ mod tests {
             ribbon: Some("Classic Ribbon".into()),
             dark_page: true,
             explorer_width: Some(360.0),
+            heading_styles: true,
+            document_editor: true,
+            cursor_space: Some(25),
+            paragraph_size: Some(11.25),
         };
         assert_eq!(Settings::parse(&settings.to_text()), settings);
     }

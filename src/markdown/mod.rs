@@ -7,7 +7,7 @@ mod serialize;
 mod tests;
 
 pub use model::*;
-pub use parse::{merge_inlines as merge, parse};
+pub use parse::{headings, merge_inlines as merge, parse};
 pub use serialize::{inlines_to_markdown, serialize};
 
 /// Parses inline Markdown such as the contents of a table cell.

@@ -39,13 +39,13 @@ impl<R: NativeRuntime> Pump<R> {
                 _ => {}
             }
         }
-        eprintln!(
-            "windows-reactor trace: components={names:?} observation={:?} commands={} \
+        perf_log(format_args!(
+            "plan: components={names:?} observation={:?} commands={} \
              create={creates} destroy={destroys} set_property={property_sets} \
              clear_property={property_clears} subscriptions={subscriptions} topology={topology}",
             self.last_native_observation,
             plan.commands.len(),
-        );
+        ));
     }
 
     pub fn dispatch_components(&mut self, budget: usize) -> Result<usize, PumpError> {
@@ -83,6 +83,21 @@ impl<R: NativeRuntime> Pump<R> {
     }
 
     fn compose_dirty_components(
+        &mut self,
+        deferred: IdSet<ComponentToken>,
+    ) -> Result<(), PumpError> {
+        let started = std::time::Instant::now();
+        let result = self.compose_dirty_components_inner(deferred);
+        if perf_enabled() {
+            perf_log(format_args!(
+                "compose (view + plan + publish): {:.2} ms",
+                started.elapsed().as_secs_f64() * 1000.0
+            ));
+        }
+        result
+    }
+
+    fn compose_dirty_components_inner(
         &mut self,
         deferred: IdSet<ComponentToken>,
     ) -> Result<(), PumpError> {
