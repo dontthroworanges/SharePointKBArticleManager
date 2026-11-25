@@ -252,7 +252,7 @@ pub enum Msg {
     ThemeChosen(Option<usize>),
     /// The status bar zoom slider moved (its position, 0 to 100).
     ZoomSlider(f64),
-    /// A preset picked in the View tab's zoom box (after the percentages, Page Width).
+    /// A percentage picked in the View tab's zoom box.
     ZoomPreset(Option<usize>),
     /// Jump to a heading, at this page position.
     Navigate(i32),
@@ -484,7 +484,7 @@ pub struct Editor {
     pub(super) overflow_commands: std::cell::RefCell<Vec<(String, Command)>>,
     /// Page zoom, 1.0 for 100%.
     zoom: f64,
-    /// View › Zoom › Page Width: the page's width follows the window's, with no upper limit
+    /// View › Page Width: the page's width follows the window's, with no upper limit
     /// (the zoom stays at 100%).
     page_fit: bool,
     /// Wheel movement with Ctrl held not yet turned into a zoom step (a touchpad sends a notch
@@ -540,7 +540,7 @@ pub const MIN_ZOOM: f64 = 0.1;
 pub const MAX_ZOOM: f64 = 5.0;
 /// The presets in the View tab's zoom box, as percentages.
 pub const ZOOM_PRESETS: [u16; 8] = [50, 75, 100, 125, 150, 200, 300, 500];
-/// The zoom box's last choice, after the presets: see [`Zoom::PageWidth`].
+/// The View tab's Page Width button, beside the zoom box: see [`Zoom::PageWidth`].
 pub const PAGE_WIDTH: &str = "Page Width";
 
 /// The tabs of the Document Editor pane, as in Word's Navigation pane.
@@ -934,8 +934,6 @@ impl Editor {
             Msg::ZoomPreset(Some(index)) => {
                 if let Some(&percent) = ZOOM_PRESETS.get(index) {
                     self.run(Command::Zoom(Zoom::To(percent)));
-                } else if index == ZOOM_PRESETS.len() {
-                    self.run(Command::Zoom(Zoom::PageWidth));
                 }
             }
             Msg::ZoomPreset(None) => {}

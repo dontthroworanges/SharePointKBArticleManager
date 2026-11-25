@@ -526,20 +526,16 @@ impl Editor {
                 .labeled()
         };
         let percent = (self.zoom * 100.0).round() as u16;
-        // Page Width comes after the percentages, as in Word's Zoom box.
+        // Page Width has its own button; while it is on, no percentage is picked, so choosing
+        // one (even 100%) leaves it.
         let preset = if self.page_fit {
-            Some(ZOOM_PRESETS.len())
+            None
         } else {
             ZOOM_PRESETS.iter().position(|&p| p == percent)
         };
         let zoom_box = Item::new(
             ComboBox::new()
-                .items_source(
-                    ZOOM_PRESETS
-                        .iter()
-                        .map(|p| format!("{p}%"))
-                        .chain(std::iter::once(PAGE_WIDTH.to_string())),
-                )
+                .items_source(ZOOM_PRESETS.iter().map(|p| format!("{p}%")))
                 .selected_index(preset)
                 // A zoom between presets shows as the box's placeholder.
                 .placeholder_text(format!("{percent}%"))
@@ -549,11 +545,7 @@ impl Editor {
                 .tooltip("Zoom"),
             120.0,
             vec![Entry::Submenu {
-                label: if self.page_fit {
-                    format!("Zoom ({PAGE_WIDTH})")
-                } else {
-                    format!("Zoom ({percent}%)")
-                },
+                label: format!("Zoom ({percent}%)"),
                 entries: ZOOM_PRESETS
                     .iter()
                     .map(|&p| {
@@ -564,12 +556,6 @@ impl Editor {
                             !self.page_fit && p == percent,
                         )
                     })
-                    .chain(std::iter::once(Entry::command(
-                        PAGE_WIDTH,
-                        Command::Zoom(Zoom::PageWidth),
-                        true,
-                        self.page_fit,
-                    )))
                     .collect(),
             }],
         );
@@ -664,6 +650,17 @@ impl Editor {
                 "Zoom",
                 Shape::Large,
                 vec![
+                    // Word's Page Width: the page as wide as the window leaves room for. Named
+                    // only in the Classic ribbon, like the zoom buttons beside it.
+                    Control::Tool(
+                        Tool::new(
+                            Icon::Path(icons::PAGE_WIDTH),
+                            PAGE_WIDTH,
+                            "Page Width: the page as wide as the window, at 100%",
+                            Command::Zoom(Zoom::PageWidth),
+                        )
+                        .active(self.page_fit),
+                    ),
                     Control::Tool(Tool::new(
                         Icon::Path(icons::ZOOM_OUT),
                         "Zoom out",
@@ -683,16 +680,17 @@ impl Editor {
                 "Theme",
                 Shape::Large,
                 vec![
-                    // Word's Switch Background: a dark page, for writing in a dark room.
+                    // Word's Switch Background: a dark page, for writing in a dark room. Named
+                    // only in the Classic ribbon.
                     Control::Tool(
                         Tool::new(
                             Icon::Path(DARK_THEME),
                             "Switch Background",
-                            "Show the page dark, or white again. The saved page is not changed",
+                            "Switch Background: show the page dark, or white again. The saved \
+                             page is not changed",
                             Command::SwitchBackground,
                         )
-                        .active(self.dark_page)
-                        .labeled(),
+                        .active(self.dark_page),
                     ),
                     Control::Custom(theme_box),
                 ],

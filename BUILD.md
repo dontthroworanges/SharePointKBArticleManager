@@ -41,7 +41,7 @@ Every element from Microsoft's [Create and edit a SharePoint Knowledge Base manu
 | Properties (YAML front matter) | View › Properties |
 | Markdown source | View › Markdown, or the Visual / Markdown buttons beside the zoom in the status bar |
 | Zoom 10–500% | Status bar slider, View › Zoom, Ctrl++ / Ctrl+- / Ctrl+0, Ctrl+mouse wheel over the page |
-| Page Width | View › Zoom › Page Width: the page as wide as the window leaves room for, at 100% |
+| Page Width | View › Page Width (its own button beside the zoom box): the page as wide as the window leaves room for, at 100% |
 | Ribbon layouts | Chevron at the end of the ribbon: Single Line Ribbon (one row of small buttons) or Classic Ribbon (groups with large buttons and group names), as in Word for the web |
 | Narrow windows | Ribbon commands (whole groups in the Classic ribbon) that do not fit move into a “More” (…) menu on every tab |
 | Light and dark themes, Mica | View › Theme: follow Windows, Light or Dark. The window uses the Mica backdrop; the page stays white in every theme (unless View › Switch Background is on). The title and tabs sit on Mica too, with no color of their own; the selected tab is underlined in the Windows accent color |
