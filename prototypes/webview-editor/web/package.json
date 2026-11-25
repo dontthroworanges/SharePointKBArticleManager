@@ -1,0 +1,22 @@
+{
+  "name": "kb-webview-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild bundle-entry.js --bundle --format=esm --minify --outfile=vendor/tiptap.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.35.0",
+    "@tiptap/extension-code": "3.35.0",
+    "@tiptap/extension-code-block": "3.35.0",
+    "@tiptap/extension-highlight": "3.35.0",
+    "@tiptap/extension-list": "3.35.0",
+    "@tiptap/extension-table": "3.35.0",
+    "@tiptap/extensions": "3.35.0",
+    "@tiptap/pm": "3.35.0",
+    "@tiptap/starter-kit": "3.35.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

@@ -1,0 +1,9 @@
+Microsoft.Web.WebView2.Core.ICoreWebView2::{Navigate, PostWebMessageAsJson, WebMessageReceived, Settings, OpenDevToolsWindow}
+Microsoft.Web.WebView2.Core.ICoreWebView2_3::{SetVirtualHostNameToFolderMapping}
+Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind
+Microsoft.Web.WebView2.Core.ICoreWebView2WebMessageReceivedEventArgs::{WebMessageAsJson}
+Microsoft.Web.WebView2.Core.ICoreWebView2Settings::{AreDevToolsEnabled, AreDefaultContextMenusEnabled, IsStatusBarEnabled, IsZoomControlEnabled}
+Microsoft.Web.WebView2.Core.CoreWebView2::{}
+Microsoft.Web.WebView2.Core.CoreWebView2Settings::{}
+Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs::{}
+Windows.Foundation.TypedEventHandler
