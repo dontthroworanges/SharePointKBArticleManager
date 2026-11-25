@@ -1,0 +1,54 @@
+name: Release
+
+# Push a tag such as v0.5.0 to build the app and publish it as a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check the tag matches Cargo.toml
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
+            Where-Object name -eq 'kb-editor' | ForEach-Object version
+          if ($tag -ne $version) { throw "Tag v$tag does not match Cargo.toml version $version" }
+          "VERSION=$version" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $dest = "SharePointKBArticleManager-$env:VERSION-win-x64"
+          New-Item -ItemType Directory $dest | Out-Null
+          # The exe plus the Windows App SDK runtime copied beside it; not cargo's build folders.
+          $skip = 'build', 'deps', 'examples', 'incremental', '.fingerprint'
+          Get-ChildItem target/release | Where-Object {
+            $_.Name -notin $skip -and $_.Extension -notin '.d', '.pdb', '.exp', '.lib', '.rlib'
+          } | Copy-Item -Destination $dest -Recurse
+          Copy-Item LICENSE, README.md $dest
+          Compress-Archive -Path $dest -DestinationPath "$dest.zip"
+          "ASSET=$dest.zip" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" "$env:ASSET" --title "${{ github.ref_name }}" --generate-notes

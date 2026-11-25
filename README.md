@@ -22,6 +22,10 @@ Set `KB_EDITOR_LOG=<file>` to write a log of editor events for debugging (it inc
 
 The page's files are in `web/`. A debug build serves them straight from there, so a change to `editor.js` or `editor.css` shows on the next start without a rebuild; a release build carries them inside the exe. `web/vendor/tiptap.js` is built from `web/package.json` (`npm ci`, then `npm run build`, in `web/`) and checked in, so building the app does not need Node.js.
 
+## CI and releases
+
+GitHub Actions (`.github/workflows/`) builds and tests every push to `main` and every pull request on Windows, and checks that `web/vendor/tiptap.js` matches its sources. To release: bump `version` in `Cargo.toml` (and `Cargo.lock`), commit, then tag and push, e.g. `git tag v0.5.0 && git push origin v0.5.0`. The release workflow checks the tag against `Cargo.toml`, runs the tests, builds, and publishes a GitHub release with a zip of the exe and its runtime files.
+
 ## What it supports
 
 Every element from Microsoft's [Create and edit a SharePoint Knowledge Base manually](https://support.microsoft.com/en-us/sharepoint/knowledge-base/create-edit-knowledge-base-manually) page:
