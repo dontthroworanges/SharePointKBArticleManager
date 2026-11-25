@@ -305,7 +305,9 @@ button.remove { margin-left: auto; }
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 0.8333rem;
   line-height: 1.5;
-  white-space: pre;
+  /* Long lines wrap at the page's edge, as in Notepad with word wrap on. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   tab-size: 4;
 }
 #source[hidden] { display: none; }

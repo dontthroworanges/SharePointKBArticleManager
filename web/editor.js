@@ -508,6 +508,8 @@ function layoutPage() {
   const cursorRoom = innerHeight * settings.cursorSpace / 100;
   const end = reachRoom ? Math.max(cursorRoom, innerHeight) : cursorRoom;
   page.style.paddingBottom = `calc(3rem + ${end}px)`;
+  // The Markdown's lines wrap at the new width.
+  if (!source.hidden) fit(source);
   placeTableTools();
 }
 window.addEventListener('resize', applySettings);
@@ -813,9 +815,7 @@ function select(from, to, ratio) {
   if (mode === 'source') {
     source.focus({ preventScroll: true });
     source.setSelectionRange(from, to);
-    const line = source.value.slice(0, from).split('\n').length - 1;
-    const lineHeight = parseFloat(getComputedStyle(source).lineHeight);
-    top = source.getBoundingClientRect().top + line * lineHeight;
+    top = source.getBoundingClientRect().top + offsetInSource(from);
   } else {
     if (!editor) return;
     const size = editor.state.doc.content.size;
@@ -836,6 +836,29 @@ function select(from, to, ratio) {
 }
 
 // ---------------------------------------------------------------- the Markdown view
+
+/** How far below the top of the Markdown text box the text at `offset` starts. Lines wrap,
+ * so this lays the text out in a hidden copy of the box, with the same width and type, and
+ * measures where a marker at the offset lands. */
+function offsetInSource(offset) {
+  const style = getComputedStyle(source);
+  const mirror = document.createElement('div');
+  for (const name of ['boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom',
+    'paddingLeft', 'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+    'fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'tabSize',
+    'whiteSpace', 'overflowWrap', 'wordBreak']) {
+    mirror.style[name] = style[name];
+  }
+  Object.assign(mirror.style, { position: 'absolute', visibility: 'hidden', top: '0', left: '-9999px', borderStyle: 'solid' });
+  mirror.textContent = source.value.slice(0, offset);
+  const marker = document.createElement('span');
+  marker.textContent = '​';
+  mirror.append(marker);
+  document.body.append(mirror);
+  const top = marker.offsetTop;
+  mirror.remove();
+  return top;
+}
 
 function showSource(markdown) {
   mode = 'source';
