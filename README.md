@@ -5,6 +5,9 @@
 
 The point of this application is to offer a simple, desktop based, Word-Like experience for creating and editing Markdown files specifically for the upcomming SharePoint Knowledge Base document library. 
 
+## Screenshot
+![Image of Main Application Window](/assets/ArticleManagerScreenshot.png)
+
 ## Current Features
 - Built in Rust with Windows native WebUI3. Supports Light/Dark themes and Windows color
 - Document canvas uses WebView2 for best speed and compatibility with SharePoint format 
