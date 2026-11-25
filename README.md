@@ -6,19 +6,19 @@
 The point of this application is to offer a simple, desktop based, Word-Like experience for creating and editing Markdown files specifically for the upcomming SharePoint Knowledge Base document library. 
 
 ## Current Features
-- Built in Rust with Windows native WebUI3. 
-- Document canvas uses WebView2 for best speed and compatibility with SharePoint format. 
-- Visual and Markdown editors with standard text formatting
+- Built in Rust with Windows native WebUI3. Supports Light/Dark themes and Windows color
+- Document canvas uses WebView2 for best speed and compatibility with SharePoint format 
+- Visual and Markdown editors with standard text formatting including six heading levels
 - Document Navigation based on Heading tags
-- Find and Replace
+- Find and Replace (One, All, Ignore One, Ignore All)
 - Windows native spell check
 
 ## Planned Features
 These planned features have yet to be explorered so they may not be feasible to implement. 
-[] Local Document management and quick linking
-[] Direct connection to SharePoint Document library
-[] Microsoft Word .DOCX Import and conversion
-[] Export of Markdown into HTML or PDF. 
+- [ ] Local Document management and quick linking
+- [ ] Direct connection to SharePoint Document library
+- [ ] Microsoft Word .DOCX Import and conversion
+- [ ] Export of Markdown into HTML or PDF. 
 
 ## Known limitations of this version
 
