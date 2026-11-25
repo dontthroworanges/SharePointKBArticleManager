@@ -9,6 +9,9 @@ use super::*;
 const PANE_LENGTH: f64 = 280.0;
 /// The room either side of a category's page.
 const PAGE_MARGIN: f64 = 40.0;
+/// The widest a category's page grows; past this it is centered in the space beside the
+/// categories, as in Windows 11 Settings.
+const PAGE_MAX_WIDTH: f64 = 1000.0;
 
 impl Editor {
     pub(in crate::app) fn settings_page(
@@ -32,12 +35,9 @@ impl Editor {
                     ]),
             )
         });
-        // Left-aligned beside the categories, as wide as the window allows up to a limit, as
-        // in Windows 11 Settings (a capped width alone would center it).
-        let width = (self.window_width - PANE_LENGTH - 2.0 * PAGE_MARGIN).clamp(320.0, 1000.0);
         let page = match category {
-            SettingsCategory::Options => self.options_page(width, context),
-            SettingsCategory::About => about_page(width),
+            SettingsCategory::Options => self.options_page(context),
+            SettingsCategory::About => about_page(),
         };
         NavigationView::new()
             .pane_display_mode(NavigationViewPaneDisplayMode::Left)
@@ -54,7 +54,7 @@ impl Editor {
             ])
     }
 
-    fn options_page(&self, width: f64, context: &mut ViewContext<Self>) -> View {
+    fn options_page(&self, context: &mut ViewContext<Self>) -> View {
         let space = CURSOR_SPACES
             .iter()
             .position(|&(_, space)| space == self.options.cursor_space);
@@ -63,7 +63,6 @@ impl Editor {
             .position(|&(_, size)| size == self.options.paragraph_size);
         category_page(
             "Options",
-            width,
             vec![
                 section("Document Editor"),
                 card(
@@ -111,10 +110,9 @@ impl Editor {
 }
 
 /// Settings › About: what was the About box. Help › About opens it.
-fn about_page(width: f64) -> View {
+fn about_page() -> View {
     category_page(
         "About",
-        width,
         vec![
             app_card(),
             TextBlock::new()
@@ -172,8 +170,11 @@ fn app_card() -> View {
         .into()
 }
 
-/// A category: its name as a large header, then its sections and cards.
-fn category_page(title: &str, width: f64, children: Vec<View>) -> View {
+/// A category: its name as a large header, then its sections and cards, all left-aligned in
+/// one column. As in Windows 11 Settings, the column fills the space beside the categories up
+/// to a limit, then stays centered in it (WinUI centers a stretched element that its maximum
+/// width holds back).
+fn category_page(title: &str, children: Vec<View>) -> View {
     let header = TextBlock::new()
         .text(title)
         .font_size(28.0)
@@ -190,8 +191,8 @@ fn category_page(title: &str, width: f64, children: Vec<View>) -> View {
             StackPanel::new()
                 .spacing(4.0)
                 .margin(Thickness::new(PAGE_MARGIN, 32.0, PAGE_MARGIN, 32.0))
-                .width(width)
-                .horizontal_alignment(HorizontalAlignment::Left)
+                .max_width(PAGE_MAX_WIDTH)
+                .horizontal_alignment(HorizontalAlignment::Stretch)
                 .keyed_children(rows),
         )
 }
