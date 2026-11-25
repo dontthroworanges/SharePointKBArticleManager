@@ -30,7 +30,7 @@ jobs:
       - name: Check the tag matches Cargo.toml
         shell: pwsh
         run: |
-          $tag = "${{ inputs.tag || github.ref_name }}" -replace "^.*?v(?=d)", ""
+          $tag = "${{ inputs.tag || github.ref_name }}" -replace '^.*?v(?=\d)', ""
           $version = (cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages |
             Where-Object name -eq 'kb-editor' | ForEach-Object version
           if ($tag -ne $version) { throw "Tag v$tag does not match Cargo.toml version $version" }
